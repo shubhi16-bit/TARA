@@ -392,9 +392,13 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                       final notesText = _notesController.text.trim().isEmpty
                           ? 'Reported via TARA App'
                           : _notesController.text.trim();
+                      int lightsDown = 1;
+                      if (_selectedIssueTypeIndex == 1) {
+                        lightsDown = 2;
+                      } else if (_selectedIssueTypeIndex == 2) {
+                        lightsDown = 3;
+                      }
                       final photoPath = _selectedImage?.path;
-
-                      setState(() => _isSubmitting = true);
 
                       await reportsProvider.submitReport(
                         issueType: issueTypeName,
@@ -402,6 +406,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                         latitude: currentLat,
                         longitude: currentLng,
                         notes: notesText,
+                        lightsDown: lightsDown,
                         imagePath: photoPath,
                       );
 

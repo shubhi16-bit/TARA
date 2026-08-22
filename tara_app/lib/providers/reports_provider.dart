@@ -55,6 +55,7 @@ class ReportsProvider extends ChangeNotifier {
     required double latitude,
     required double longitude,
     required String notes,
+    int lightsDown = 1,
     String? imagePath,
     String? userPhone,
   }) async {
@@ -65,6 +66,7 @@ class ReportsProvider extends ChangeNotifier {
       latitude: latitude,
       longitude: longitude,
       notes: notes,
+      lightsDown: lightsDown,
       imagePath: imagePath,
       userPhone: userPhone,
     );

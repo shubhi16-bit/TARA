@@ -67,6 +67,7 @@ export interface Streetlight {
 
 export interface CommunityReport {
   id: string;
+  reportId?: string;
   type: string;
   issueType?: string;
   desc?: string;
@@ -77,10 +78,12 @@ export interface CommunityReport {
   status: 'OPEN' | 'VERIFIED' | 'RESOLVED' | 'logged' | 'inReview' | 'inRepair' | 'resolved';
   verificationStatus?: string;
   photoUrls?: string[];
+  photoUrl?: string;
   imageUrl?: string;
   city?: string;
   cityId?: string;
   road?: string;
+  roadName?: string;
   roadId?: string;
   location?: string;
   locationAddress?: string;
@@ -89,6 +92,7 @@ export interface CommunityReport {
   userPhone?: string;
   timestamp?: any;
   createdAt?: any;
+  updatedAt?: any;
   adminNotes?: string;
   riskRelevance?: number;
 }
@@ -530,28 +534,32 @@ export function subscribeToCityData(
             const photoUrls = data.photoUrls || (data.photoUrl ? [data.photoUrl] : (data.imageUrl ? [data.imageUrl] : []));
             return {
               id: d.id,
+              reportId: data.reportId || d.id,
               type: data.issueType || data.type || 'Community Report',
-              issueType: data.issueType || data.type,
-              desc: data.desc || data.notes || data.description || '',
-              notes: data.notes || data.desc || '',
+              issueType: data.issueType || data.type || 'Community Report',
+              desc: data.notes || data.desc || data.description || '',
+              notes: data.notes || data.desc || data.description || '',
               lat: typeof lat === 'number' ? lat : 0,
               lng: typeof lng === 'number' ? lng : 0,
               time: formatTime(data.createdAt || data.timestamp || data.time),
               status: (data.status || data.verificationStatus || 'logged') as any,
               verificationStatus: data.verificationStatus || data.status || 'OPEN',
               photoUrls: photoUrls,
+              photoUrl: data.photoUrl || (photoUrls.length > 0 ? photoUrls[0] : undefined),
               imageUrl: data.imageUrl || (photoUrls.length > 0 ? photoUrls[0] : undefined),
               city: data.city || data.cityId,
               cityId: data.cityId || data.city,
-              road: data.road,
+              road: data.road || data.roadName,
+              roadName: data.roadName || data.road,
               roadId: data.roadId,
               location: data.location || data.locationAddress,
               locationAddress: data.locationAddress || data.location,
-              lightsDown: data.lightsDown,
+              lightsDown: typeof data.lightsDown === 'number' ? data.lightsDown : 1,
               userId: data.userId || data.userPhone,
               userPhone: data.userPhone || data.userId,
               timestamp: data.timestamp,
               createdAt: data.createdAt || data.timestamp,
+              updatedAt: data.updatedAt || data.createdAt || data.timestamp,
               adminNotes: data.adminNotes,
               riskRelevance: data.riskRelevance,
             } as CommunityReport;

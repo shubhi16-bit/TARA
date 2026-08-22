@@ -181,6 +181,7 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
 
     const reportData = {
       id: reportId,
+      reportId: reportId,
       userId: reportUserId,
       userPhone: reportUserId,
       type: reportType,
@@ -202,7 +203,9 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
       city: nearestCity,
       timestamp: adminApp.firestore.FieldValue.serverTimestamp(),
       createdAt: adminApp.firestore.FieldValue.serverTimestamp(),
+      updatedAt: adminApp.firestore.FieldValue.serverTimestamp(),
       photoUrls: finalPhotoUrls,
+      photoUrl: finalPhotoUrls[0] || null,
       imageUrl: finalPhotoUrls[0] || null,
       verificationStatus: 'OPEN',
       adminNotes: '',
@@ -225,6 +228,7 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
       success: true,
       ...reportData,
       createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {

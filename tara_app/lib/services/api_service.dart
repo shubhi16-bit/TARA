@@ -11,8 +11,8 @@ class ApiService {
   factory ApiService() => _instance;
   ApiService._internal();
 
-  /// Default API URL (can be customized for localhost, LAN IP, or Cloud)
-  String baseUrl = 'http://10.0.2.2:5000/api';
+  /// Default API URL (works with adb reverse on Android and on Web)
+  String baseUrl = 'http://localhost:5000/api';
 
   void setBaseUrl(String newUrl) {
     baseUrl = newUrl;
@@ -57,6 +57,7 @@ class ApiService {
     required double latitude,
     required double longitude,
     required String notes,
+    int lightsDown = 1,
     String? imagePath,
     String? userPhone,
   }) async {
@@ -66,9 +67,12 @@ class ApiService {
         var request = http.MultipartRequest('POST', Uri.parse('$baseUrl/reports'));
         request.fields['issueType'] = issueType;
         request.fields['location'] = locationAddress;
+        request.fields['locationAddress'] = locationAddress;
         request.fields['latitude'] = latitude.toString();
         request.fields['longitude'] = longitude.toString();
         request.fields['notes'] = notes;
+        request.fields['description'] = notes;
+        request.fields['lightsDown'] = lightsDown.toString();
         if (userPhone != null) request.fields['userPhone'] = userPhone;
 
         request.files.add(await http.MultipartFile.fromPath('photo', imagePath));
@@ -79,7 +83,7 @@ class ApiService {
         if (response.statusCode == 201 || response.statusCode == 200) {
           final data = jsonDecode(response.body);
           return ReportModel(
-            id: data['id'] ?? 'REP-${DateTime.now().millisecondsSinceEpoch % 10000}',
+            id: data['id'] ?? data['reportId'] ?? 'REP-${DateTime.now().millisecondsSinceEpoch % 10000}',
             issueType: issueType,
             locationAddress: locationAddress,
             latitude: latitude,
@@ -97,10 +101,14 @@ class ApiService {
           headers: {'Content-Type': 'application/json'},
           body: jsonEncode({
             'issueType': issueType,
+            'type': issueType,
             'location': locationAddress,
+            'locationAddress': locationAddress,
             'latitude': latitude,
             'longitude': longitude,
             'notes': notes,
+            'description': notes,
+            'lightsDown': lightsDown,
             'userPhone': userPhone,
           }),
         ).timeout(const Duration(seconds: 4));
@@ -108,7 +116,7 @@ class ApiService {
         if (res.statusCode == 201 || res.statusCode == 200) {
           final data = jsonDecode(res.body);
           return ReportModel(
-            id: data['id'] ?? 'REP-${DateTime.now().millisecondsSinceEpoch % 10000}',
+            id: data['id'] ?? data['reportId'] ?? 'REP-${DateTime.now().millisecondsSinceEpoch % 10000}',
             issueType: issueType,
             locationAddress: locationAddress,
             latitude: latitude,
