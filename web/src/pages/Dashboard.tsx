@@ -7,84 +7,16 @@ import {
   Popup,
   ZoomControl,
 } from 'react-leaflet';
-
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { useTaraData } from '../hooks/useTaraData';
+import type { Road } from '../services/taraDataService';
 
-const mockStats = {
-  totalStreetlights: 1284,
-  faulty: 183,
-  criticalZones: 24,
-  pendingReports: 47,
-  activeCrimes: 3,
+const cityCoordinates: Record<string, [number, number]> = {
+  'New Delhi': [28.6315, 77.2190],
+  'Mumbai': [19.0760, 72.8777],
+  'Metropolis': [28.6315, 77.2190],
 };
-
-const recentActivity = [
-  {
-    id: 1,
-    type: 'crime',
-    label: 'Theft reported',
-    location: 'Inner Circle, CP',
-    time: '10 mins ago',
-    severity: 'HIGH',
-  },
-  {
-    id: 2,
-    type: 'report',
-    label: 'Broken streetlight',
-    location: 'Janpath',
-    time: '35 mins ago',
-    severity: 'MODERATE',
-  },
-  {
-    id: 3,
-    type: 'crime',
-    label: 'Harassment reported',
-    location: 'Janpath',
-    time: '1 hour ago',
-    severity: 'CRITICAL',
-  },
-  {
-    id: 4,
-    type: 'report',
-    label: 'Dark area reported',
-    location: 'Pragati Maidan',
-    time: '2 hours ago',
-    severity: 'MODERATE',
-  },
-  {
-    id: 5,
-    type: 'repair',
-    label: 'Streetlight repaired',
-    location: 'India Gate',
-    time: '3 hours ago',
-    severity: 'LOW',
-  },
-];
-
-const topPriority = [
-  {
-    rank: 1,
-    location: 'Inner Circle, CP',
-    score: 91,
-    reason: '3 faulty lights • Active theft reported nearby',
-    tags: ['High footfall', 'Multiple reports'],
-  },
-  {
-    rank: 2,
-    location: 'Janpath',
-    score: 78,
-    reason: 'Dark zone • Harassment report',
-    tags: ['High footfall', 'Recent crime'],
-  },
-  {
-    rank: 3,
-    location: 'Sansad Marg',
-    score: 52,
-    reason: '1 faulty light • Moderate footfall',
-    tags: ['Medium footfall', 'Lighting issue'],
-  },
-];
 
 function Icon({
   type,
@@ -190,13 +122,10 @@ function getSeverityStyle(severity: string) {
   switch (severity) {
     case 'CRITICAL':
       return 'text-risk-crit bg-risk-crit/10 border-risk-crit/20';
-
     case 'HIGH':
       return 'text-risk-high bg-risk-high/10 border-risk-high/20';
-
     case 'MODERATE':
       return 'text-risk-mod bg-risk-mod/10 border-risk-mod/20';
-
     default:
       return 'text-risk-low bg-risk-low/10 border-risk-low/20';
   }
@@ -205,13 +134,15 @@ function getSeverityStyle(severity: string) {
 function getPriorityColor(score: number) {
   if (score >= 80) return 'text-risk-crit';
   if (score >= 60) return 'text-risk-high';
-  return 'text-risk-mod';
+  if (score >= 30) return 'text-risk-mod';
+  return 'text-risk-low';
 }
 
-function getActivityIcon(type: string) {
-  if (type === 'crime') return 'crime';
-  if (type === 'repair') return 'repair';
-  return 'report';
+function getRiskHex(score: number) {
+  if (score >= 80) return '#ef4444';
+  if (score >= 60) return '#f97316';
+  if (score >= 30) return '#eab308';
+  return '#22c55e';
 }
 
 function KpiCard({
@@ -264,303 +195,221 @@ function KpiCard({
   );
 }
 
-function RiskHeatmap() {
-  const hotspots = [
-    {
-      id: 'cp',
-      name: 'Connaught Place',
-      position: [28.6315, 77.2190] as [number, number],
-      score: 91,
-      level: 'Very High',
-      color: '#ef4444',
-      radius: 900,
-      reasons: 'Active theft + multiple faulty lights',
-    },
-    {
-      id: 'janpath',
-      name: 'Janpath',
-      position: [28.6272, 77.2190] as [number, number],
-      score: 78,
-      level: 'High',
-      color: '#f97316',
-      radius: 750,
-      reasons: 'Harassment report + dark zone',
-    },
-    {
-      id: 'pragati',
-      name: 'Pragati Maidan',
-      position: [28.6208, 77.2470] as [number, number],
-      score: 68,
-      level: 'High',
-      color: '#f97316',
-      radius: 700,
-      reasons: 'Recent reports + lower night safety',
-    },
-    {
-      id: 'india-gate',
-      name: 'India Gate',
-      position: [28.6129, 77.2295] as [number, number],
-      score: 52,
-      level: 'Moderate',
-      color: '#eab308',
-      radius: 650,
-      reasons: 'Faulty lighting + moderate footfall',
-    },
-    {
-      id: 'karol-bagh',
-      name: 'Karol Bagh',
-      position: [28.6514, 77.1907] as [number, number],
-      score: 42,
-      level: 'Moderate',
-      color: '#eab308',
-      radius: 600,
-      reasons: 'Moderate reports',
-    },
-    {
-      id: 'lajpat',
-      name: 'Lajpat Nagar',
-      position: [28.5677, 77.2433] as [number, number],
-      score: 24,
-      level: 'Low',
-      color: '#22c55e',
-      radius: 550,
-      reasons: 'Low incident activity',
-    },
-  ];
+function DashboardMap({ roads, city }: { roads: Road[]; city: string }) {
+  const centerPos = cityCoordinates[city] || [28.6315, 77.2190];
 
-  /*
-   * Small glowing marker used for the visual hotspot.
-   */
   const createGlowIcon = (color: string) =>
     L.divIcon({
       className: '',
       html: `
         <div
           style="
-            width: 18px;
-            height: 18px;
+            width: 16px;
+            height: 16px;
             border-radius: 9999px;
             background: ${color};
-            box-shadow:
-              0 0 8px ${color},
-              0 0 18px ${color},
-              0 0 35px ${color},
-              0 0 55px ${color};
-            border: 2px solid rgba(255,255,255,0.55);
+            box-shadow: 0 0 8px ${color}, 0 0 16px ${color};
+            border: 2px solid rgba(255,255,255,0.7);
           "
         ></div>
       `,
-      iconSize: [18, 18],
-      iconAnchor: [9, 9],
+      iconSize: [16, 16],
+      iconAnchor: [8, 8],
     });
 
+  const spots = roads
+    .filter((r) => r.coordinates && r.coordinates.length > 0)
+    .map((r) => ({
+      id: r.id,
+      name: r.name,
+      position: r.coordinates[0] as [number, number],
+      score: r.score,
+      level: r.riskLevel,
+      color: getRiskHex(r.score),
+      reasons: `${r.faultyLights} faulty lights • ${r.crimeNearby} crimes`,
+    }));
+
   return (
-    <section className="relative h-[360px] overflow-hidden rounded-xl border border-brand-border bg-[#07101f] xl:col-span-3">
-
-      {/* =====================================================
-          MAP
-      ===================================================== */}
-
+    <section className="relative h-[360px] overflow-hidden rounded-xl border border-brand-border bg-brand-surface xl:col-span-3">
       <MapContainer
-        center={[28.625, 77.218]}
-        zoom={12}
+        key={city}
+        center={spots.length > 0 ? spots[0].position : centerPos}
+        zoom={13}
         zoomControl={false}
         attributionControl={false}
         style={{
           height: '100%',
           width: '100%',
-          background: '#07101f',
+          background: 'var(--brand-dark)',
         }}
       >
-
         <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
         />
-
         <ZoomControl position="topright" />
 
-        {/* -----------------------------------------------
-            RISK AREAS
-        ------------------------------------------------ */}
-
-        {hotspots.map((spot) => (
+        {spots.map((spot) => (
           <Circle
             key={`area-${spot.id}`}
             center={spot.position}
-            radius={spot.radius}
+            radius={700}
             pathOptions={{
               color: spot.color,
               fillColor: spot.color,
-              fillOpacity:
-                spot.score >= 80
-                  ? 0.12
-                  : spot.score >= 60
-                  ? 0.09
-                  : spot.score >= 30
-                  ? 0.07
-                  : 0.05,
-              weight: 0,
-              opacity: 0,
+              fillOpacity: spot.score >= 80 ? 0.18 : 0.09,
+              weight: 1,
             }}
           />
         ))}
 
-        {/* -----------------------------------------------
-            GLOWING HOTSPOT MARKERS
-        ------------------------------------------------ */}
-
-        {hotspots.map((spot) => (
+        {spots.map((spot) => (
           <Marker
             key={spot.id}
             position={spot.position}
             icon={createGlowIcon(spot.color)}
           >
             <Popup>
-              <div className="min-w-[180px] font-sans text-gray-900">
-
-                <p className="text-sm font-semibold">
-                  {spot.name}
-                </p>
-
-                <div className="mt-2 flex items-end gap-2">
-
-                  <span
-                    className="text-2xl font-bold"
-                    style={{
-                      color: spot.color,
-                    }}
-                  >
+              <div className="min-w-[170px] font-sans text-gray-900">
+                <p className="text-sm font-semibold">{spot.name}</p>
+                <div className="mt-1 flex items-end gap-2">
+                  <span className="text-xl font-bold" style={{ color: spot.color }}>
                     {spot.score}
                   </span>
-
-                  <span className="mb-1 text-xs text-gray-500">
-                    / 100
-                  </span>
-
+                  <span className="mb-0.5 text-xs text-gray-500">/ 100</span>
                 </div>
-
-                <p
-                  className="mt-1 text-xs font-semibold"
-                  style={{
-                    color: spot.color,
-                  }}
-                >
+                <p className="mt-1 text-xs font-semibold" style={{ color: spot.color }}>
                   {spot.level} Risk
                 </p>
-
-                <p className="mt-2 text-xs text-gray-500">
-                  {spot.reasons}
-                </p>
-
+                <p className="mt-1 text-xs text-gray-500">{spot.reasons}</p>
               </div>
             </Popup>
           </Marker>
         ))}
-
       </MapContainer>
 
-      {/* =====================================================
-          TITLE
-      ===================================================== */}
-
-      <div className="pointer-events-none absolute left-4 top-4 z-[500]">
-
-        <h3 className="text-sm font-semibold text-white">
-          Risk Heatmap
-        </h3>
-
-        <p className="mt-0.5 text-[11px] text-slate-400">
-          City-wide safety risk visualization
-        </p>
-
+      <div className="pointer-events-none absolute left-4 top-4 z-[500] rounded-md bg-brand-surface/90 px-3 py-1.5 backdrop-blur border border-brand-border shadow-sm">
+        <h3 className="text-xs font-semibold text-brand-text">Risk Heatmap</h3>
+        <p className="text-[10px] text-brand-muted">City-wide safety risk visualization</p>
       </div>
 
-      {/* =====================================================
-          LEGEND
-      ===================================================== */}
-
-      <div className="absolute bottom-4 left-4 z-[500] rounded-xl border border-white/10 bg-[#0b1220]/90 p-3 shadow-xl backdrop-blur">
-
-        <p className="mb-2 text-[10px] font-semibold text-white">
-          Risk Level
-        </p>
-
-        <div className="space-y-2">
-
+      <div className="absolute bottom-4 left-4 z-[500] rounded-xl border border-brand-border bg-brand-surface/95 p-3 shadow-xl backdrop-blur">
+        <p className="mb-2 text-[10px] font-semibold text-brand-text">Risk Level</p>
+        <div className="space-y-1.5">
           {[
-            ['Very High', '#ef4444'],
+            ['Critical', '#ef4444'],
             ['High', '#f97316'],
             ['Moderate', '#eab308'],
             ['Low', '#22c55e'],
           ].map(([label, color]) => (
-            <div
-              key={label}
-              className="flex items-center gap-2"
-            >
+            <div key={label} className="flex items-center gap-2">
               <span
-                className="h-2.5 w-2.5 rounded-full"
-                style={{
-                  backgroundColor: color,
-                  boxShadow: `0 0 8px ${color}`,
-                }}
+                className="h-2 w-2 rounded-full"
+                style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}` }}
               />
-
-              <span className="text-[10px] text-slate-300">
-                {label}
-              </span>
+              <span className="text-[10px] text-brand-muted">{label}</span>
             </div>
           ))}
-
         </div>
-
       </div>
 
-      {/* =====================================================
-          LIVE INDICATOR
-      ===================================================== */}
-
-      <div className="absolute right-14 top-4 z-[500] flex items-center gap-1.5 rounded-full border border-green-500/20 bg-black/40 px-2.5 py-1.5 backdrop-blur">
-
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-400" />
-
-        <span className="text-[9px] font-medium text-green-400">
-          LIVE
-        </span>
-
+      <div className="absolute right-14 top-4 z-[500] flex items-center gap-1.5 rounded-full border border-green-500/20 bg-brand-surface/90 px-2.5 py-1 backdrop-blur">
+        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
+        <span className="text-[9px] font-semibold text-green-500">LIVE SYNC</span>
       </div>
-
     </section>
   );
 }
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const city = localStorage.getItem('authCity') || 'Metropolis';
+  const {
+    roads,
+    crimes,
+    streetlights,
+    reports,
+    loading,
+    city,
+    profileError,
+  } = useTaraData();
+
+  // Compute live KPIs
+  const totalLights = streetlights.length > 0
+    ? streetlights.length
+    : roads.reduce((sum, r) => sum + (r.totalLights || 0), 0);
+
+  const faultyLights = streetlights.filter((l) => l.status === 'faulty' || l.status === 'broken').length > 0
+    ? streetlights.filter((l) => l.status === 'faulty' || l.status === 'broken').length
+    : roads.reduce((sum, r) => sum + (r.faultyLights || 0), 0);
+
+  const criticalZones = roads.filter((r) => r.score >= 80).length;
+  const pendingReports = reports.filter((r) => r.status === 'OPEN').length;
+  const activeCrimes = crimes.length;
+
+  // Sorted priorities
+  const topPriority = [...roads].sort((a, b) => b.score - a.score).slice(0, 4);
+
+  // Combined live activity feed
+  const recentActivity = [
+    ...crimes.map((c) => ({
+      id: `c-${c.id}`,
+      type: 'crime',
+      label: `${c.type} reported`,
+      location: c.desc || (c.lat != null && c.lng != null ? `${c.lat.toFixed(3)}, ${c.lng.toFixed(3)}` : (c.district || city)),
+      time: c.time,
+      severity: c.severity,
+    })),
+    ...reports.map((r) => ({
+      id: `r-${r.id}`,
+      type: 'report',
+      label: r.type,
+      location: r.desc || city,
+      time: r.time,
+      severity: r.status === 'OPEN' ? 'MODERATE' : 'LOW',
+    })),
+    ...streetlights
+      .filter((s) => s.status === 'repaired' || s.status === 'repair_dispatched')
+      .map((s) => ({
+        id: `s-${s.id}`,
+        type: 'repair',
+        label: s.status === 'repaired' ? 'Streetlight repaired' : 'Repair dispatched',
+        location: s.road || city,
+        time: 'Recent',
+        severity: 'LOW',
+      })),
+  ].slice(0, 6);
+
+  const avgSafetyScore = roads.length > 0
+    ? Math.round(100 - roads.reduce((sum, r) => sum + r.score, 0) / roads.length)
+    : 75;
 
   return (
     <div className="min-h-full bg-brand-dark p-5 md:p-7">
+      {/* PROFILE ERROR BANNER IF DOCUMENT MISSING */}
+      {profileError && (
+        <div className="mb-6 rounded-lg border border-risk-crit/30 bg-risk-crit/10 p-4 text-risk-crit text-sm">
+          <p className="font-semibold">Authority Setup Note:</p>
+          <p className="mt-1">{profileError}</p>
+        </div>
+      )}
+
       {/* HEADER */}
       <header className="mb-6 flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
         <div>
-          <div className="mb-1 flex items-center gap-2">
-          </div>
-
           <h2 className="text-2xl font-semibold tracking-tight text-brand-text">
-            Overview — {city}
+            Overview — {city || 'Authority Command'}
           </h2>
-
           <p className="mt-1 text-sm text-brand-muted">
-            Real-time safety metrics, active incidents, and top priorities.
+            Real-time safety metrics, active incidents, and top priorities from Firestore.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <span className="text-xs text-brand-muted">
-            Last updated just now
+            {loading ? 'Syncing Firestore...' : 'Connected to Firestore'}
           </span>
 
-          <div className="flex items-center gap-2 rounded-full border border-green-500/20 bg-green-500/5 px-3 py-1.5 text-xs text-green-400">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-green-400" />
+          <div className="flex items-center gap-2 rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-xs text-green-500 font-medium">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-green-500" />
             System Online
           </div>
         </div>
@@ -571,46 +420,41 @@ export default function Dashboard() {
         <KpiCard
           icon="light"
           label="Streetlights"
-          value={mockStats.totalStreetlights.toLocaleString()}
+          value={totalLights.toLocaleString()}
           description="Total monitored"
           accent="text-primary"
-          trend="↑ 18 repaired"
         />
 
         <KpiCard
           icon="warning"
           label="Faulty Lights"
-          value={mockStats.faulty.toString()}
+          value={faultyLights.toString()}
           description="Needs repair"
           accent="text-risk-mod"
-          trend="↑ 11 today"
         />
 
         <KpiCard
           icon="shield"
           label="Critical Zones"
-          value={mockStats.criticalZones.toString()}
-          description="High-risk areas"
+          value={criticalZones.toString()}
+          description="High-risk segments"
           accent="text-risk-crit"
-          trend="↑ 4 today"
         />
 
         <KpiCard
           icon="report"
-          label="Reports"
-          value={mockStats.pendingReports.toString()}
-          description="New today"
-          accent="text-blue-400"
-          trend="↓ 6 resolved"
+          label="Open Reports"
+          value={pendingReports.toString()}
+          description="Citizen reports"
+          accent="text-primary"
         />
 
         <KpiCard
           icon="crime"
           label="Active Crimes"
-          value={mockStats.activeCrimes.toString()}
-          description="Live alerts"
+          value={activeCrimes.toString()}
+          description="Incident records"
           accent="text-risk-high"
-          trend="View alerts →"
         />
       </div>
 
@@ -637,75 +481,57 @@ export default function Dashboard() {
           </div>
 
           <div className="divide-y divide-brand-border">
-            {topPriority.map((item) => (
-              <button
-                key={item.rank}
-                onClick={() => navigate('/priority')}
-                className="group flex w-full items-center gap-4 px-5 py-4 text-left transition hover:bg-white/[0.025]"
-              >
-                <div
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.035] text-lg font-bold ${getPriorityColor(
-                    item.score
-                  )}`}
+            {topPriority.length > 0 ? (
+              topPriority.map((item, idx) => (
+                <button
+                  key={item.id}
+                  onClick={() => navigate('/priority')}
+                  className="group flex w-full items-center gap-4 px-5 py-4 text-left transition hover:bg-brand-border/20"
                 >
-                  #{item.rank}
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-brand-text">
-                    {item.location}
-                  </p>
-
-                  <p className="mt-1 truncate text-xs text-brand-muted">
-                    {item.reason}
-                  </p>
-
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {item.tags.map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-md bg-brand-dark px-2 py-0.5 text-[9px] text-brand-muted"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="hidden w-28 text-right sm:block">
-                  <p
-                    className={`text-2xl font-bold ${getPriorityColor(
+                  <div
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-brand-dark text-lg font-bold ${getPriorityColor(
                       item.score
                     )}`}
                   >
-                    {item.score}
-                  </p>
-                  <p className="text-[9px] font-medium uppercase tracking-wider text-brand-muted">
-                    Risk Score
-                  </p>
+                    #{idx + 1}
+                  </div>
 
-                  {/* mini sparkline */}
-                  <svg
-                    className="ml-auto mt-1 h-7 w-20"
-                    viewBox="0 0 80 28"
-                    fill="none"
-                  >
-                    <path
-                      d={
-                        item.rank === 1
-                          ? 'M0 24 C8 24 8 5 16 5 C24 5 22 20 30 18 C38 16 38 11 45 16 C52 21 54 7 61 12 C68 18 72 8 80 10'
-                          : item.rank === 2
-                          ? 'M0 23 C8 23 10 8 17 8 C25 8 23 18 31 17 C40 16 40 10 47 14 C54 18 56 9 63 13 C70 17 74 9 80 11'
-                          : 'M0 22 C8 22 10 13 17 13 C25 13 24 19 31 18 C39 17 40 12 47 16 C55 20 56 11 63 14 C70 18 74 12 80 13'
-                      }
-                      stroke="currentColor"
-                      className={getPriorityColor(item.score)}
-                      strokeWidth="1.5"
-                    />
-                  </svg>
-                </div>
-              </button>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold text-brand-text">
+                      {item.name}
+                    </p>
+
+                    <p className="mt-1 truncate text-xs text-brand-muted">
+                      {item.faultyLights} faulty lights • {item.crimeNearby} nearby incidents • {item.reports} reports
+                    </p>
+
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      <span className="rounded-md bg-brand-dark px-2 py-0.5 text-[9px] text-brand-muted border border-brand-border">
+                        {item.riskLevel} RISK
+                      </span>
+                      {item.nightExposure < 40 && (
+                        <span className="rounded-md bg-brand-dark px-2 py-0.5 text-[9px] text-brand-muted border border-brand-border">
+                          Low night lighting
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="hidden w-28 text-right sm:block">
+                    <p className={`text-2xl font-bold ${getPriorityColor(item.score)}`}>
+                      {item.score}
+                    </p>
+                    <p className="text-[9px] font-medium uppercase tracking-wider text-brand-muted">
+                      Risk Score
+                    </p>
+                  </div>
+                </button>
+              ))
+            ) : (
+              <div className="p-8 text-center text-sm text-brand-muted">
+                {loading ? 'Loading road records...' : `No road safety records found for ${city || 'this city'}.`}
+              </div>
+            )}
           </div>
         </section>
 
@@ -717,105 +543,108 @@ export default function Dashboard() {
                 Live Activity Feed
               </h3>
               <p className="mt-0.5 text-[11px] text-brand-muted">
-                Real-time updates from the city
+                Real-time updates from Firestore
               </p>
             </div>
-
-            <button className="text-xs font-medium text-primary hover:underline">
-              View All
-            </button>
           </div>
 
           <div className="max-h-[365px] divide-y divide-brand-border overflow-y-auto">
-            {recentActivity.map((item) => (
-              <div
-                key={item.id}
-                className="flex items-start gap-3 px-5 py-3.5 transition hover:bg-white/[0.025]"
-              >
+            {recentActivity.length > 0 ? (
+              recentActivity.map((item) => (
                 <div
-                  className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${getSeverityStyle(
-                    item.severity
-                  )}`}
+                  key={item.id}
+                  className="flex items-start gap-3 px-5 py-3.5 transition hover:bg-brand-border/20"
                 >
-                  <Icon type={getActivityIcon(item.type)} size={17} />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <span
-                      className={`rounded border px-1.5 py-0.5 text-[8px] font-bold tracking-wide ${getSeverityStyle(
-                        item.severity
-                      )}`}
-                    >
-                      {item.severity}
-                    </span>
-
-                    <span className="text-[10px] text-brand-muted">
-                      {item.time}
-                    </span>
+                  <div
+                    className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${getSeverityStyle(
+                      item.severity
+                    )}`}
+                  >
+                    <Icon type={item.type} size={17} />
                   </div>
 
-                  <p className="mt-1 text-xs font-semibold text-brand-text">
-                    {item.label}
-                  </p>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className={`rounded border px-1.5 py-0.5 text-[8px] font-bold tracking-wide ${getSeverityStyle(
+                          item.severity
+                        )}`}
+                      >
+                        {item.severity}
+                      </span>
+                      <span className="text-[10px] text-brand-muted">
+                        {item.time}
+                      </span>
+                    </div>
 
-                  <p className="mt-0.5 text-[11px] text-brand-muted">
-                    {item.location}
-                  </p>
+                    <p className="mt-1 text-xs font-semibold text-brand-text">
+                      {item.label}
+                    </p>
+
+                    <p className="mt-0.5 text-[11px] text-brand-muted">
+                      {item.location}
+                    </p>
+                  </div>
                 </div>
+              ))
+            ) : (
+              <div className="p-8 text-center text-sm text-brand-muted">
+                {loading ? 'Loading activity...' : 'No incident activity recorded yet.'}
               </div>
-            ))}
+            )}
           </div>
         </section>
       </div>
 
       {/* LOWER GRID */}
       <div className="mt-5 grid grid-cols-1 gap-5 xl:grid-cols-5">
-        <RiskHeatmap />
+        <DashboardMap roads={roads} city={city} />
 
-        {/* TODAY AT A TARA */}
+        {/* TODAY AT TARA */}
         <section className="rounded-xl border border-brand-border bg-brand-surface p-5 xl:col-span-2">
           <div className="mb-4">
             <h3 className="text-sm font-semibold text-brand-text">
-              Key city-wide indicators
+              Key Safety Indicators
             </h3>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
             <div className="rounded-lg border border-brand-border bg-brand-dark/40 p-4">
-              <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+              <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-500">
                 <Icon type="people" size={17} />
               </div>
-              <p className="text-[10px] text-brand-muted">Est. Night Footfall</p>
-              <p className="mt-1 text-xl font-bold text-brand-text">18.6K</p>
-              <p className="mt-1 text-[9px] text-risk-low">↑ 8% vs yesterday</p>
+              <p className="text-[10px] text-brand-muted">Monitored Roads</p>
+              <p className="mt-1 text-xl font-bold text-brand-text">{roads.length}</p>
+              <p className="mt-1 text-[9px] text-brand-muted">{city || 'City-wide'}</p>
             </div>
 
             <div className="rounded-lg border border-brand-border bg-brand-dark/40 p-4">
-              <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-green-500/10 text-green-400">
+              <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-green-500/10 text-green-500">
                 <Icon type="shield" size={17} />
               </div>
               <p className="text-[10px] text-brand-muted">Avg. Safety Score</p>
-              <p className="mt-1 text-xl font-bold text-brand-text">63/100</p>
-              <p className="mt-1 text-[9px] text-risk-low">↑ 5 vs yesterday</p>
+              <p className="mt-1 text-xl font-bold text-brand-text">{avgSafetyScore}/100</p>
+              <p className="mt-1 text-[9px] text-risk-low">Active Risk Engine</p>
             </div>
 
             <div className="rounded-lg border border-brand-border bg-brand-dark/40 p-4">
               <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 text-primary">
                 <Icon type="report" size={17} />
               </div>
-              <p className="text-[10px] text-brand-muted">Reports Received</p>
-              <p className="mt-1 text-xl font-bold text-brand-text">47</p>
-              <p className="mt-1 text-[9px] text-risk-low">↑ 12 vs yesterday</p>
+              <p className="text-[10px] text-brand-muted">Total Reports</p>
+              <p className="mt-1 text-xl font-bold text-brand-text">{reports.length}</p>
+              <p className="mt-1 text-[9px] text-brand-muted">Community submitted</p>
             </div>
 
             <div className="rounded-lg border border-brand-border bg-brand-dark/40 p-4">
-              <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10 text-orange-400">
+              <div className="mb-3 flex h-8 w-8 items-center justify-center rounded-lg bg-orange-500/10 text-orange-500">
                 <Icon type="repair" size={17} />
               </div>
-              <p className="text-[10px] text-brand-muted">Issues Resolved</p>
-              <p className="mt-1 text-xl font-bold text-brand-text">6</p>
-              <p className="mt-1 text-[9px] text-risk-low">↑ 2 vs yesterday</p>
+              <p className="text-[10px] text-brand-muted">Faulty Ratio</p>
+              <p className="mt-1 text-xl font-bold text-brand-text">
+                {totalLights > 0 ? `${Math.round((faultyLights / totalLights) * 100)}%` : '0%'}
+              </p>
+              <p className="mt-1 text-[9px] text-brand-muted">Infrastructure status</p>
             </div>
           </div>
         </section>

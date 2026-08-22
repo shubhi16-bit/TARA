@@ -1,17 +1,28 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { auth } from '../config/firebase';
 
 export default function Login() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [city, setCity] = useState('Metropolis');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    // Save city to localStorage to simulate auth session passing location
-    localStorage.setItem('authCity', city);
-    navigate('/dashboard');
+    setError('');
+    setLoading(true);
+
+    try {
+      await signInWithEmailAndPassword(auth, email, password);
+      navigate('/dashboard');
+    } catch (err: any) {
+      setError(err.message || 'Failed to login. Please check your credentials.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -34,6 +45,8 @@ export default function Login() {
           <p className="text-brand-muted text-sm uppercase tracking-widest font-semibold">Authority Portal</p>
         </div>
 
+        {error && <div className="mb-4 text-risk-crit bg-risk-crit/10 border border-risk-crit p-3 rounded text-sm">{error}</div>}
+
         <form onSubmit={handleLogin} className="space-y-5">
           <div>
             <label className="block text-sm font-medium text-brand-text mb-1">Email</label>
@@ -44,6 +57,7 @@ export default function Login() {
               className="w-full bg-brand-dark border border-brand-border rounded px-4 py-2 text-brand-text focus:outline-none focus:border-risk-mod transition-colors"
               placeholder="authority@city.gov"
               required
+              disabled={loading}
             />
           </div>
           <div>
@@ -55,26 +69,16 @@ export default function Login() {
               className="w-full bg-brand-dark border border-brand-border rounded px-4 py-2 text-brand-text focus:outline-none focus:border-risk-mod transition-colors"
               placeholder="••••••••"
               required
+              disabled={loading}
             />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-brand-text mb-1">Assigned City / Region</label>
-            <select 
-              value={city}
-              onChange={(e) => setCity(e.target.value)}
-              className="w-full bg-brand-dark border border-brand-border rounded px-4 py-2 text-brand-text focus:outline-none focus:border-risk-mod transition-colors"
-            >
-              <option value="New Delhi">New Delhi</option>
-              <option value="Mumbai">Mumbai</option>
-              <option value="Metropolis">Metropolis (Demo)</option>
-            </select>
           </div>
 
           <button 
             type="submit" 
-            className="w-full bg-risk-mod text-white font-semibold py-2.5 rounded hover:bg-risk-mod/90 transition-colors mt-4"
+            className="w-full bg-risk-mod text-white font-semibold py-2.5 rounded hover:bg-risk-mod/90 transition-colors mt-4 disabled:opacity-50"
+            disabled={loading}
           >
-            Access Command Center
+            {loading ? 'Authenticating...' : 'Access Command Center'}
           </button>
         </form>
       </div>

@@ -1,0 +1,628 @@
+import {
+  collection,
+  onSnapshot,
+  doc,
+  updateDoc,
+  getDocs,
+} from 'firebase/firestore';
+import { db } from '../config/firebase';
+import {
+  calculateRoadRisk,
+  categorizeRiskLevel,
+} from './riskEngine';
+import type { RiskLevel, RiskFactorsBreakdown } from './riskEngine';
+
+export type { RiskLevel };
+
+export interface Road {
+  id: string;
+  name: string;
+  score: number;
+  riskLevel: RiskLevel;
+  factors?: RiskFactorsBreakdown;
+  faultyLights: number;
+  totalLights: number;
+  crimeNearby: number;
+  reports: number;
+  nightExposure: number;
+  coordinates: [number, number][];
+  city?: string;
+  cityId?: string;
+  inspectionStatus?: string; // 'logged' | 'pending'
+  inspectedAt?: any;
+  maintenanceStatus?: string; // 'scheduled' | 'in_progress' | 'completed'
+  maintenanceDate?: string;
+  maintenanceNotes?: string;
+  repairStatus?: string; // 'dispatched'
+}
+
+export interface Crime {
+  id: string;
+  type: string;
+  desc?: string;
+  lat: number | null;
+  lng: number | null;
+  time: string;
+  severity: RiskLevel;
+  city?: string;
+  cityId?: string;
+  timestamp?: any;
+  district?: string;
+  policeStation?: string;
+  source?: string;
+  sourceUrl?: string;
+  riskRelevance?: number;
+}
+
+export interface Streetlight {
+  id: string;
+  lat: number;
+  lng: number;
+  road: string;
+  status: string; // 'working' | 'faulty' | 'broken' | 'repair_dispatched' | 'repaired'
+  city?: string;
+  roadId?: string;
+}
+
+export interface CommunityReport {
+  id: string;
+  type: string;
+  desc?: string;
+  lat: number;
+  lng: number;
+  time: string;
+  status: 'OPEN' | 'VERIFIED' | 'RESOLVED';
+  photoUrls?: string[];
+  city?: string;
+  timestamp?: any;
+  adminNotes?: string;
+}
+
+export interface RiskSnapshot {
+  id: string;
+  cityId?: string;
+  city?: string;
+  timestamp?: any;
+  date?: string;
+  timeLabel?: string;
+  overallScore?: number;
+  avgRiskScore?: number;
+}
+
+export interface TaraDataState {
+  roads: Road[];
+  crimes: Crime[];
+  streetlights: Streetlight[];
+  reports: CommunityReport[];
+  riskSnapshots: RiskSnapshot[];
+  loading: boolean;
+  error: string | null;
+}
+
+export function computeRiskLevel(score: number): RiskLevel {
+  return categorizeRiskLevel(score);
+}
+
+export function parseCoordinates(raw: any): [number, number][] {
+  if (!raw) return [];
+  if (Array.isArray(raw)) {
+    if (raw.length === 0) return [];
+    if (Array.isArray(raw[0])) {
+      return raw as [number, number][];
+    }
+    if (typeof raw[0] === 'object' && raw[0] !== null) {
+      return raw.map((pt: any) => [
+        typeof pt.lat === 'number' ? pt.lat : typeof pt.latitude === 'number' ? pt.latitude : 0,
+        typeof pt.lng === 'number' ? pt.lng : typeof pt.longitude === 'number' ? pt.longitude : 0,
+      ]);
+    }
+    if (typeof raw[0] === 'string') {
+      return raw.map((s: string) => {
+        const [lat, lng] = s.split(',').map(Number);
+        return [lat || 0, lng || 0];
+      });
+    }
+  }
+  return [];
+}
+
+// Format relative time or ISO timestamp
+function formatTime(val: any): string {
+  if (!val) return 'Just now';
+  if (typeof val === 'string') return val;
+  if (val.toDate && typeof val.toDate === 'function') {
+    const date = val.toDate();
+    const diffMin = Math.round((Date.now() - date.getTime()) / 60000);
+    if (diffMin < 1) return 'Just now';
+    if (diffMin < 60) return `${diffMin} mins ago`;
+    const diffHours = Math.round(diffMin / 60);
+    if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+    const diffDays = Math.round(diffHours / 24);
+    return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+  }
+  return 'Recently';
+}
+
+function formatSnapshotDate(val: any): string {
+  if (!val) return '';
+  if (typeof val === 'string') return val;
+  if (val.toDate && typeof val.toDate === 'function') {
+    const d = val.toDate();
+    return `${d.getMonth() + 1}/${d.getDate()}`;
+  }
+  return '';
+}
+
+/**
+ * Recomputes road risk scores using the deterministic TARA risk engine
+ */
+function enrichRoadsWithRiskEngine(
+  rawRoads: Road[],
+  lights: Streetlight[],
+  crimesList: Crime[],
+  reportsList: CommunityReport[]
+): Road[] {
+  return rawRoads.map((road) => {
+    // 1. Calculate actual faulty lights associated with this road
+    const matchingLights = lights.filter(
+      (l) => (l.road && l.road.toLowerCase() === road.name.toLowerCase()) || (l.roadId && l.roadId === road.id)
+    );
+    const faultyFromLights = matchingLights.filter(
+      (l) => l.status === 'faulty' || l.status === 'broken'
+    ).length;
+    const totalL = matchingLights.length > 0 ? matchingLights.length : road.totalLights || 10;
+    const faultyL = matchingLights.length > 0 ? faultyFromLights : road.faultyLights || 0;
+
+    // 2. Crimes count for this road
+    const matchingCrimes = crimesList.filter(
+      (c) => c.desc && c.desc.toLowerCase().includes(road.name.toLowerCase())
+    );
+    const crimeCount = matchingCrimes.length > 0 ? matchingCrimes.length : road.crimeNearby || 0;
+    const highestCrimeSeverity = matchingCrimes.length > 0 ? matchingCrimes[0]?.severity : undefined;
+
+    // 3. Reports count for this road
+    const matchingReports = reportsList.filter(
+      (r) => r.desc && r.desc.toLowerCase().includes(road.name.toLowerCase())
+    );
+    const reportsCount = matchingReports.length > 0 ? matchingReports.length : road.reports || 0;
+
+    // 4. Calculate deterministic risk using TARA risk engine
+    const riskResult = calculateRoadRisk({
+      faultyLights: faultyL,
+      totalLights: totalL,
+      crimeCount,
+      highestCrimeSeverity,
+      reportsCount,
+      footfallRating: road.nightExposure || 45,
+    });
+
+    const score = road.score > 0 && riskResult.score === 0 ? road.score : riskResult.score;
+    const finalLevel = categorizeRiskLevel(score);
+
+    return {
+      ...road,
+      score: finalScore(score),
+      riskLevel: finalLevel,
+      factors: riskResult.factors,
+      faultyLights: faultyL,
+      totalLights: totalL,
+      reports: reportsCount,
+    };
+  });
+}
+
+function finalScore(s: number): number {
+  return Math.max(0, Math.min(100, s));
+}
+
+/**
+ * Subscribe to live Firestore collections for a given city.
+ */
+export function subscribeToCityData(
+  city: string,
+  onData: (data: TaraDataState) => void
+): () => void {
+  let rawRoads: Road[] = [];
+  let crimes: Crime[] = [];
+  let streetlights: Streetlight[] = [];
+  let reports: CommunityReport[] = [];
+  let riskSnapshots: RiskSnapshot[] = [];
+  let loadedCollections = 0;
+  const totalCollections = 5;
+
+  const emit = () => {
+    const enrichedRoads = enrichRoadsWithRiskEngine(rawRoads, streetlights, crimes, reports);
+    onData({
+      roads: enrichedRoads,
+      crimes,
+      streetlights,
+      reports,
+      riskSnapshots,
+      loading: loadedCollections < totalCollections,
+      error: null,
+    });
+  };
+
+  // 1. Roads listener
+  const roadsRef = collection(db, 'roads');
+  const unsubRoads = onSnapshot(
+    roadsRef,
+    (snap) => {
+      if (!snap.empty) {
+        rawRoads = snap.docs
+          .map((d) => {
+            const data = d.data();
+            const score = typeof data.score === 'number' ? data.score : typeof data.overall_risk_score === 'number' ? data.overall_risk_score : 0;
+            return {
+              id: d.id,
+              name: data.name || data.road_name || 'Unnamed Road',
+              score,
+              riskLevel: categorizeRiskLevel(score),
+              faultyLights: data.faultyLights || data.faulty_lights || 0,
+              totalLights: data.totalLights || data.total_lights || 0,
+              crimeNearby: data.crimeNearby || data.crime_count || 0,
+              reports: data.reports || data.report_count || 0,
+              nightExposure: data.nightExposure || data.pedestrian_exposure_score || 50,
+              coordinates: parseCoordinates(data.coordinates || data.points || (data.latitude && data.longitude ? [{ lat: data.latitude, lng: data.longitude }] : [])),
+              city: data.city || data.cityId,
+              cityId: data.cityId || data.city,
+              inspectionStatus: data.inspectionStatus,
+              inspectedAt: data.inspectedAt,
+              maintenanceStatus: data.maintenanceStatus,
+              maintenanceDate: data.maintenanceDate,
+              maintenanceNotes: data.maintenanceNotes,
+              repairStatus: data.repairStatus,
+            } as Road;
+          })
+          .filter((r) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase() || (r.cityId && r.cityId.toLowerCase() === city.toLowerCase()));
+      } else {
+        getDocs(collection(db, 'road_segments'))
+          .then((segSnap) => {
+            rawRoads = segSnap.docs
+              .map((d) => {
+                const data = d.data();
+                const score = typeof data.overall_risk_score === 'number' ? data.overall_risk_score : 0;
+                return {
+                  id: d.id,
+                  name: data.road_name || data.name || 'Segment ' + d.id,
+                  score,
+                  riskLevel: categorizeRiskLevel(score),
+                  faultyLights: data.lighting_score ? Math.round(data.lighting_score / 15) : 0,
+                  totalLights: 10,
+                  crimeNearby: data.crime_score ? Math.round(data.crime_score / 25) : 0,
+                  reports: data.community_report_score ? Math.round(data.community_report_score / 15) : 0,
+                  nightExposure: data.pedestrian_exposure_score || 50,
+                  coordinates: parseCoordinates(data.coordinates || data.points || (data.latitude && data.longitude ? [{ lat: data.latitude, lng: data.longitude }] : [])),
+                  city: data.city || data.cityId,
+                  cityId: data.cityId || data.city,
+                  inspectionStatus: data.inspectionStatus,
+                  inspectedAt: data.inspectedAt,
+                  maintenanceStatus: data.maintenanceStatus,
+                  maintenanceDate: data.maintenanceDate,
+                  maintenanceNotes: data.maintenanceNotes,
+                  repairStatus: data.repairStatus,
+                } as Road;
+              })
+              .filter((r) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase() || (r.cityId && r.cityId.toLowerCase() === city.toLowerCase()));
+            emit();
+          })
+          .catch(() => {});
+      }
+      loadedCollections++;
+      emit();
+    },
+    (err) => {
+      console.warn('Roads snapshot error:', err);
+      loadedCollections++;
+      emit();
+    }
+  );
+
+  // 2. Streetlights listener
+  const lightsRef = collection(db, 'streetlights');
+  const unsubLights = onSnapshot(
+    lightsRef,
+    (snap) => {
+      streetlights = snap.docs
+        .map((d) => {
+          const data = d.data();
+          const lat = data.lat || (Array.isArray(data.loc) ? data.loc[0] : 0);
+          const lng = data.lng || (Array.isArray(data.loc) ? data.loc[1] : 0);
+          return {
+            id: d.id,
+            lat: typeof lat === 'number' ? lat : 0,
+            lng: typeof lng === 'number' ? lng : 0,
+            road: data.road || data.roadName || data.roadId || 'Street',
+            status: data.status || 'faulty',
+            city: data.city || data.cityId,
+            roadId: data.roadId,
+          } as Streetlight;
+        })
+        .filter((l) => !city || !l.city || l.city.toLowerCase() === city.toLowerCase());
+      loadedCollections++;
+      emit();
+    },
+    (err) => {
+      console.warn('Streetlights snapshot error:', err);
+      loadedCollections++;
+      emit();
+    }
+  );
+
+  // 3. Crime reports listener
+  const crimeRef = collection(db, 'crimeReports');
+  const unsubCrimes = onSnapshot(
+    crimeRef,
+    (snap) => {
+      if (!snap.empty) {
+        crimes = snap.docs
+          .map((d) => {
+            const data = d.data();
+            const rawLat = data.lat !== undefined ? data.lat : (Array.isArray(data.loc) ? data.loc[0] : null);
+            const rawLng = data.lng !== undefined ? data.lng : (Array.isArray(data.loc) ? data.loc[1] : null);
+            return {
+              id: d.id,
+              type: data.type || 'Incident',
+              desc: data.desc || data.description || data.title || '',
+              lat: typeof rawLat === 'number' ? rawLat : null,
+              lng: typeof rawLng === 'number' ? rawLng : null,
+              time: formatTime(data.timestamp || data.time || data.pressDate),
+              severity: (data.severity || 'HIGH') as RiskLevel,
+              city: data.city || data.cityId,
+              cityId: data.cityId || data.city,
+              timestamp: data.timestamp,
+              district: data.district,
+              policeStation: data.policeStation,
+              source: data.source,
+              sourceUrl: data.sourceUrl,
+              riskRelevance: data.riskRelevance,
+            } as Crime;
+          })
+          .filter((c) => !city || !c.city || c.city.toLowerCase() === city.toLowerCase() || (c.cityId && c.cityId.toLowerCase() === city.toLowerCase()));
+      } else {
+        getDocs(collection(db, 'crimes'))
+          .then((cSnap) => {
+            crimes = cSnap.docs
+              .map((d) => {
+                const data = d.data();
+                const rawLat = data.lat !== undefined ? data.lat : (Array.isArray(data.loc) ? data.loc[0] : null);
+                const rawLng = data.lng !== undefined ? data.lng : (Array.isArray(data.loc) ? data.loc[1] : null);
+                return {
+                  id: d.id,
+                  type: data.type || 'Incident',
+                  desc: data.desc || data.description || data.title || '',
+                  lat: typeof rawLat === 'number' ? rawLat : null,
+                  lng: typeof rawLng === 'number' ? rawLng : null,
+                  time: formatTime(data.timestamp || data.time || data.pressDate),
+                  severity: (data.severity || 'HIGH') as RiskLevel,
+                  city: data.city || data.cityId,
+                  cityId: data.cityId || data.city,
+                  timestamp: data.timestamp,
+                  district: data.district,
+                  policeStation: data.policeStation,
+                  source: data.source,
+                  sourceUrl: data.sourceUrl,
+                  riskRelevance: data.riskRelevance,
+                } as Crime;
+              })
+              .filter((c) => !city || !c.city || c.city.toLowerCase() === city.toLowerCase() || (c.cityId && c.cityId.toLowerCase() === city.toLowerCase()));
+            emit();
+          })
+          .catch(() => {});
+      }
+      loadedCollections++;
+      emit();
+    },
+    (err) => {
+      console.warn('Crimes snapshot error:', err);
+      loadedCollections++;
+      emit();
+    }
+  );
+
+  // 4. Community reports listener
+  const reportsRef = collection(db, 'communityReports');
+  const unsubReports = onSnapshot(
+    reportsRef,
+    (snap) => {
+      if (!snap.empty) {
+        reports = snap.docs
+          .map((d) => {
+            const data = d.data();
+            const lat = data.lat || (Array.isArray(data.loc) ? data.loc[0] : 0);
+            const lng = data.lng || (Array.isArray(data.loc) ? data.loc[1] : 0);
+            return {
+              id: d.id,
+              type: data.type || 'Community Report',
+              desc: data.desc || data.description || '',
+              lat: typeof lat === 'number' ? lat : 0,
+              lng: typeof lng === 'number' ? lng : 0,
+              time: formatTime(data.timestamp || data.time),
+              status: (data.status || data.verificationStatus || 'OPEN') as 'OPEN' | 'VERIFIED' | 'RESOLVED',
+              photoUrls: data.photoUrls || (data.photoUrl ? [data.photoUrl] : []),
+              city: data.city || data.cityId,
+              timestamp: data.timestamp,
+              adminNotes: data.adminNotes,
+            } as CommunityReport;
+          })
+          .filter((r) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase());
+      } else {
+        getDocs(collection(db, 'reports'))
+          .then((rSnap) => {
+            reports = rSnap.docs
+              .map((d) => {
+                const data = d.data();
+                const lat = data.lat || (Array.isArray(data.loc) ? data.loc[0] : 0);
+                const lng = data.lng || (Array.isArray(data.loc) ? data.loc[1] : 0);
+                return {
+                  id: d.id,
+                  type: data.type || 'Community Report',
+                  desc: data.desc || data.description || '',
+                  lat: typeof lat === 'number' ? lat : 0,
+                  lng: typeof lng === 'number' ? lng : 0,
+                  time: formatTime(data.timestamp || data.time),
+                  status: (data.status || 'OPEN') as 'OPEN' | 'VERIFIED' | 'RESOLVED',
+                  photoUrls: data.photoUrls || (data.photoUrl ? [data.photoUrl] : []),
+                  city: data.city || data.cityId,
+                  timestamp: data.timestamp,
+                  adminNotes: data.adminNotes,
+                } as CommunityReport;
+              })
+              .filter((r) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase());
+            emit();
+          })
+          .catch(() => {});
+      }
+      loadedCollections++;
+      emit();
+    },
+    (err) => {
+      console.warn('Community reports snapshot error:', err);
+      loadedCollections++;
+      emit();
+    }
+  );
+
+  // 5. Risk Snapshots listener
+  const snapshotsRef = collection(db, 'riskSnapshots');
+  const unsubSnapshots = onSnapshot(
+    snapshotsRef,
+    (snap) => {
+      riskSnapshots = snap.docs
+        .map((d) => {
+          const data = d.data();
+          const score = typeof data.overallScore === 'number' ? data.overallScore : typeof data.avgRiskScore === 'number' ? data.avgRiskScore : 0;
+          return {
+            id: d.id,
+            cityId: data.cityId || data.city,
+            city: data.city || data.cityId,
+            timestamp: data.timestamp,
+            date: data.date || formatSnapshotDate(data.timestamp),
+            timeLabel: data.timeLabel || formatSnapshotDate(data.timestamp),
+            overallScore: score,
+            avgRiskScore: score,
+          } as RiskSnapshot;
+        })
+        .filter((s) => !city || !s.city || s.city.toLowerCase() === city.toLowerCase());
+      loadedCollections++;
+      emit();
+    },
+    (err) => {
+      console.warn('Risk snapshots snapshot error:', err);
+      loadedCollections++;
+      emit();
+    }
+  );
+
+  return () => {
+    unsubRoads();
+    unsubLights();
+    unsubCrimes();
+    unsubReports();
+    unsubSnapshots();
+  };
+}
+
+/**
+ * Update Streetlight Status in Firestore
+ */
+export async function updateStreetlightStatus(
+  id: string,
+  status: string
+): Promise<void> {
+  const lightRef = doc(db, 'streetlights', id);
+  await updateDoc(lightRef, {
+    status,
+    updatedAt: new Date(),
+  });
+}
+
+/**
+ * Update Road Inspection Status in Firestore
+ */
+export async function updateRoadInspection(roadId: string): Promise<void> {
+  const roadRef = doc(db, 'roads', roadId);
+  try {
+    await updateDoc(roadRef, {
+      inspectionStatus: 'logged',
+      inspectedAt: new Date(),
+      updatedAt: new Date(),
+    });
+  } catch {
+    const fallbackRef = doc(db, 'road_segments', roadId);
+    await updateDoc(fallbackRef, {
+      inspectionStatus: 'logged',
+      inspectedAt: new Date(),
+      updatedAt: new Date(),
+    });
+  }
+}
+
+/**
+ * Schedule Road Maintenance in Firestore
+ */
+export async function scheduleRoadMaintenance(
+  roadId: string,
+  maintenanceDate: string,
+  notes?: string
+): Promise<void> {
+  const payload: any = {
+    maintenanceStatus: 'scheduled',
+    maintenanceDate,
+    maintenanceNotes: notes || '',
+    maintenanceScheduledAt: new Date(),
+    updatedAt: new Date(),
+  };
+  const roadRef = doc(db, 'roads', roadId);
+  try {
+    await updateDoc(roadRef, payload);
+  } catch {
+    const fallbackRef = doc(db, 'road_segments', roadId);
+    await updateDoc(fallbackRef, payload);
+  }
+}
+
+/**
+ * Update Road Repair Status in Firestore
+ */
+export async function updateRoadRepairStatus(
+  roadId: string,
+  status: string
+): Promise<void> {
+  const payload = {
+    repairStatus: status,
+    updatedAt: new Date(),
+  };
+  const roadRef = doc(db, 'roads', roadId);
+  try {
+    await updateDoc(roadRef, payload);
+  } catch {
+    const fallbackRef = doc(db, 'road_segments', roadId);
+    await updateDoc(fallbackRef, payload);
+  }
+}
+
+/**
+ * Update Community Report Status in Firestore
+ */
+export async function updateReportStatus(
+  id: string,
+  status: 'OPEN' | 'VERIFIED' | 'RESOLVED',
+  adminNotes?: string
+): Promise<void> {
+  const reportRef = doc(db, 'communityReports', id);
+  const payload: any = {
+    status,
+    verificationStatus: status,
+    updatedAt: new Date(),
+  };
+  if (adminNotes !== undefined) {
+    payload.adminNotes = adminNotes;
+  }
+  try {
+    await updateDoc(reportRef, payload);
+  } catch {
+    const fallbackRef = doc(db, 'reports', id);
+    await updateDoc(fallbackRef, payload);
+  }
+}

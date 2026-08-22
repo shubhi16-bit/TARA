@@ -1,354 +1,20 @@
+import { useEffect, useMemo, useState } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import {
   MapContainer,
   TileLayer,
   Polyline,
   Popup,
   CircleMarker,
-  useMap,
   ZoomControl,
+  useMap,
 } from 'react-leaflet';
-
-import { useEffect, useMemo, useState } from 'react';
+import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
-
-type RiskLevel = 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
-
-type Road = {
-  id: string;
-  name: string;
-  score: number;
-  riskLevel: RiskLevel;
-  faultyLights: number;
-  totalLights: number;
-  crimeNearby: number;
-  reports: number;
-  nightExposure: number;
-  coordinates: [number, number][];
-};
-
-type Crime = {
-  id: string;
-  type: string;
-  lat: number;
-  lng: number;
-  time: string;
-  severity: RiskLevel;
-};
-
-type Streetlight = {
-  id: string;
-  lat: number;
-  lng: number;
-  road: string;
-};
-
-type CommunityReport = {
-  id: string;
-  type: string;
-  lat: number;
-  lng: number;
-  time: string;
-  status: 'OPEN' | 'VERIFIED' | 'RESOLVED';
-};
-
-type MapData = {
-  roads: Road[];
-  crimes: Crime[];
-  streetlights: Streetlight[];
-  reports: CommunityReport[];
-};
-
-/* =========================================================
-   DEMO DATA
-   Used only until /api/map/overview is connected.
-   ========================================================= */
-
-const demoData: MapData = {
-  roads: [
-    {
-      id: 'r1',
-      name: 'Barakhamba Road',
-      score: 32,
-      riskLevel: 'MODERATE',
-      faultyLights: 1,
-      totalLights: 8,
-      crimeNearby: 0,
-      reports: 2,
-      nightExposure: 72,
-      coordinates: [
-        [28.6315, 77.2197],
-        [28.6310, 77.2220],
-        [28.6304, 77.2245],
-        [28.6297, 77.2270],
-        [28.6290, 77.2295],
-      ],
-    },
-
-    {
-      id: 'r2',
-      name: 'Janpath',
-      score: 72,
-      riskLevel: 'HIGH',
-      faultyLights: 5,
-      totalLights: 10,
-      crimeNearby: 2,
-      reports: 8,
-      nightExposure: 38,
-      coordinates: [
-        [28.6315, 77.2197],
-        [28.6300, 77.2195],
-        [28.6285, 77.2192],
-        [28.6268, 77.2190],
-        [28.6250, 77.2187],
-      ],
-    },
-
-    {
-      id: 'r3',
-      name: 'Sansad Marg',
-      score: 58,
-      riskLevel: 'HIGH',
-      faultyLights: 3,
-      totalLights: 9,
-      crimeNearby: 1,
-      reports: 5,
-      nightExposure: 52,
-      coordinates: [
-        [28.6315, 77.2197],
-        [28.6305, 77.2178],
-        [28.6293, 77.2158],
-        [28.6280, 77.2138],
-        [28.6268, 77.2118],
-      ],
-    },
-
-    {
-    id: 'r4',
-    name: 'Baba Kharak Singh Marg',
-    score: 85,
-    riskLevel: 'CRITICAL',
-    faultyLights: 7,
-    totalLights: 10,
-    crimeNearby: 3,
-    reports: 12,
-    nightExposure: 24,
-
-    coordinates: [
-      [28.6339, 77.2168],
-      [28.6344, 77.2157],
-      [28.6350, 77.2145],
-      [28.6357, 77.2135],
-      [28.6364, 77.2128],
-    ],
-  },
-
-    {
-      id: 'r5',
-      name: 'Kasturba Gandhi Marg',
-      score: 45,
-      riskLevel: 'MODERATE',
-      faultyLights: 2,
-      totalLights: 12,
-      crimeNearby: 0,
-      reports: 3,
-      nightExposure: 66,
-      coordinates: [
-        [28.6315, 77.2197],
-        [28.6330, 77.2195],
-        [28.6345, 77.2192],
-        [28.6360, 77.2190],
-      ],
-    },
-
-    {
-      id: 'r6',
-      name: 'Tolstoy Marg',
-      score: 22,
-      riskLevel: 'LOW',
-      faultyLights: 0,
-      totalLights: 8,
-      crimeNearby: 0,
-      reports: 1,
-      nightExposure: 81,
-      coordinates: [
-        [28.6315, 77.2197],
-        [28.6328, 77.2210],
-        [28.6340, 77.2225],
-        [28.6352, 77.2240],
-      ],
-    },
-
-    {
-      id: 'r7',
-      name: 'Minto Road',
-      score: 65,
-      riskLevel: 'HIGH',
-      faultyLights: 4,
-      totalLights: 8,
-      crimeNearby: 1,
-      reports: 6,
-      nightExposure: 41,
-      coordinates: [
-        [28.6290, 77.2295],
-        [28.6278, 77.2285],
-        [28.6268, 77.2270],
-      ],
-    },
-
-    {
-      id: 'r8',
-      name: 'Ashoka Road',
-      score: 38,
-      riskLevel: 'MODERATE',
-      faultyLights: 1,
-      totalLights: 6,
-      crimeNearby: 0,
-      reports: 2,
-      nightExposure: 69,
-      coordinates: [
-        [28.6250, 77.2187],
-        [28.6248, 77.2165],
-        [28.6250, 77.2142],
-      ],
-    },
-
-    {
-    id: 'r9',
-    name: 'Panchkuian Road',
-    score: 91,
-    riskLevel: 'CRITICAL',
-    faultyLights: 8,
-    totalLights: 10,
-    crimeNearby: 2,
-    reports: 15,
-    nightExposure: 19,
-
-    coordinates: [
-      [28.6462, 77.2058],
-      [28.6448, 77.2070],
-      [28.6432, 77.2084],
-      [28.6417, 77.2097],
-      [28.6401, 77.2110],
-    ],
-  },
-
-    {
-      id: 'r10',
-      name: 'Connaught Lane',
-      score: 15,
-      riskLevel: 'LOW',
-      faultyLights: 0,
-      totalLights: 6,
-      crimeNearby: 0,
-      reports: 0,
-      nightExposure: 88,
-      coordinates: [
-        [28.6360, 77.2190],
-        [28.6358, 77.2210],
-        [28.6352, 77.2240],
-      ],
-    },
-  ],
-
-  crimes: [
-    {
-      id: 'c1',
-      type: 'Theft',
-      lat: 28.6322,
-      lng: 77.2168,
-      time: '10 mins ago',
-      severity: 'HIGH',
-    },
-    {
-      id: 'c2',
-      type: 'Harassment',
-      lat: 28.6272,
-      lng: 77.2190,
-      time: '1 hour ago',
-      severity: 'CRITICAL',
-    },
-    {
-      id: 'c3',
-      type: 'Robbery',
-      lat: 28.6348,
-      lng: 77.2115,
-      time: '3 hours ago',
-      severity: 'HIGH',
-    },
-    {
-      id: 'c4',
-      type: 'Vandalism',
-      lat: 28.6295,
-      lng: 77.2155,
-      time: '5 hours ago',
-      severity: 'MODERATE',
-    },
-    {
-      id: 'c5',
-      type: 'Assault',
-      lat: 28.6325,
-      lng: 77.2145,
-      time: '30 mins ago',
-      severity: 'CRITICAL',
-    },
-  ],
-
-  streetlights: [
-    {
-      id: 'sl1',
-      lat: 28.6320,
-      lng: 77.2160,
-      road: 'Baba Kharak Singh Marg',
-    },
-    {
-      id: 'sl2',
-      lat: 28.6326,
-      lng: 77.2145,
-      road: 'Baba Kharak Singh Marg',
-    },
-    {
-      id: 'sl3',
-      lat: 28.6350,
-      lng: 77.2115,
-      road: 'Panchkuian Road',
-    },
-    {
-      id: 'sl4',
-      lat: 28.6280,
-      lng: 77.2192,
-      road: 'Janpath',
-    },
-    {
-      id: 'sl5',
-      lat: 28.6295,
-      lng: 77.2162,
-      road: 'Sansad Marg',
-    },
-  ],
-
-  reports: [
-    {
-      id: 'rp1',
-      type: 'Dark Area',
-      lat: 28.6318,
-      lng: 77.2165,
-      time: '25 mins ago',
-      status: 'OPEN',
-    },
-    {
-      id: 'rp2',
-      type: 'Broken Light',
-      lat: 28.6290,
-      lng: 77.2191,
-      time: '42 mins ago',
-      status: 'VERIFIED',
-    },
-  ],
-};
-
-/* =========================================================
-   MAP CONFIG
-   ========================================================= */
+import 'leaflet.heat';
+import { useTaraData } from '../hooks/useTaraData';
+import type { RiskLevel } from '../services/riskEngine';
+import { Shield, AlertTriangle, Lightbulb, FileText, Flame } from 'lucide-react';
 
 const cityCoordinates: Record<
   string,
@@ -356,27 +22,17 @@ const cityCoordinates: Record<
 > = {
   'New Delhi': {
     center: [28.6315, 77.2190],
-    zoom: 15,
-  },
-
-  Mumbai: {
-    center: [19.0760, 72.8777],
     zoom: 14,
   },
-
-  Metropolis: {
+  'Mumbai': {
+    center: [19.0760, 72.8777],
+    zoom: 13,
+  },
+  'Metropolis': {
     center: [28.6315, 77.2190],
-    zoom: 15,
+    zoom: 14,
   },
 };
-
-/* =========================================================
-   HELPERS
-   ========================================================= */
-
-/* =========================================================
-   RISK HELPERS
-   ========================================================= */
 
 function getRiskColor(score: number) {
   if (score >= 80) return '#ef4444';
@@ -392,42 +48,13 @@ function getRiskLabel(score: number): RiskLevel {
   return 'LOW';
 }
 
-function getRiskWeight(score: number) {
-  if (score >= 80) return 5;
+function getRiskWeight(score: number, isSelected: boolean) {
+  if (isSelected) return 8;
+  if (score >= 80) return 5.5;
   if (score >= 60) return 4.5;
   if (score >= 30) return 4;
   return 3.5;
 }
-
-
-/* =========================================================
-   MAP CONTROLLER
-   ========================================================= */
-
-function MapController({
-  selectedRoad,
-}: {
-  selectedRoad: Road | null;
-}) {
-  const map = useMap();
-
-  useEffect(() => {
-    if (!selectedRoad) return;
-
-    map.fitBounds(selectedRoad.coordinates, {
-      padding: [80, 80],
-      maxZoom: 16,
-      animate: true,
-    });
-  }, [selectedRoad, map]);
-
-  return null;
-}
-
-
-/* =========================================================
-   SMALL MAP STAT
-   ========================================================= */
 
 function MapStat({
   label,
@@ -439,11 +66,10 @@ function MapStat({
   color: string;
 }) {
   return (
-    <div className="rounded-lg border border-white/10 bg-[#0b111c]/90 px-3 py-2 backdrop-blur-md">
-      <p className="text-[8px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+    <div className="rounded-lg border border-brand-border bg-brand-surface/95 px-3 py-2 backdrop-blur-md shadow-sm">
+      <p className="text-[8px] font-semibold uppercase tracking-[0.14em] text-brand-muted">
         {label}
       </p>
-
       <p
         className="mt-0.5 text-lg font-bold leading-none"
         style={{ color }}
@@ -454,334 +80,290 @@ function MapStat({
   );
 }
 
+// Heatmap Layer using leaflet.heat
+function HeatmapLayer({
+  points,
+  show,
+}: {
+  points: [number, number, number][];
+  show: boolean;
+}) {
+  const map = useMap();
 
-/* =========================================================
-   MAIN MAP
-   ========================================================= */
+  useEffect(() => {
+    if (!map || !show || points.length === 0) return;
+
+    const heat = (L as any).heatLayer(points, {
+      radius: 30,
+      blur: 22,
+      maxZoom: 16,
+      max: 1.0,
+      minOpacity: 0.3,
+      gradient: {
+        0.15: '#22c55e', // Low risk
+        0.40: '#eab308', // Moderate
+        0.70: '#f97316', // High
+        0.95: '#ef4444', // Critical
+      },
+    });
+
+    heat.addTo(map);
+
+    return () => {
+      map.removeLayer(heat);
+    };
+  }, [map, points, show]);
+
+  return null;
+}
+
+// Controller to smoothly fit to selected road
+function MapFocusController({
+  selectedCoordinates,
+}: {
+  selectedCoordinates?: [number, number][];
+}) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (selectedCoordinates && selectedCoordinates.length > 0) {
+      const bounds = L.latLngBounds(selectedCoordinates);
+      map.fitBounds(bounds, { padding: [60, 60], maxZoom: 16, animate: true });
+    }
+  }, [map, selectedCoordinates]);
+
+  return null;
+}
 
 export default function MapPage() {
-  const [city, setCity] = useState('New Delhi');
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const urlSearch = searchParams.get('search') || '';
 
-  const [data, setData] = useState<MapData>(demoData);
+  const { roads, crimes, streetlights, reports, loading, city, profileError } = useTaraData();
 
-  const [selectedRoad, setSelectedRoad] =
-    useState<Road | null>(null);
-
+  const [showHeatmap, setShowHeatmap] = useState(true);
   const [showCrimes, setShowCrimes] = useState(true);
   const [showLights, setShowLights] = useState(true);
-  const [showReports, setShowReports] = useState(false);
+  const [showReports, setShowReports] = useState(true);
+  const [search, setSearch] = useState(urlSearch);
+  const [riskFilter, setRiskFilter] = useState<'ALL' | RiskLevel>('ALL');
+  const [selectedRoadId, setSelectedRoadId] = useState<string | null>(null);
 
-  const [search, setSearch] = useState('');
-
-  const [riskFilter, setRiskFilter] =
-    useState<'ALL' | RiskLevel>('ALL');
-
-  const [loading, setLoading] = useState(false);
-  const [apiOnline, setApiOnline] = useState(false);
-
-
-  /* =======================================================
-     CITY
-     ======================================================= */
-
+  // Sync URL search param if changed externally
   useEffect(() => {
-    const authCity = localStorage.getItem('authCity');
-
-    if (authCity) {
-      setCity(authCity);
+    if (urlSearch) {
+      setSearch(urlSearch);
     }
-  }, []);
+  }, [urlSearch]);
 
+  const filteredRoads = useMemo(() => {
+    return roads.filter((road) => {
+      const matchesSearch = road.name
+        .toLowerCase()
+        .includes(search.toLowerCase());
+      const matchesRisk =
+        riskFilter === 'ALL' || road.riskLevel === riskFilter;
+      return matchesSearch && matchesRisk;
+    });
+  }, [roads, search, riskFilter]);
 
-  /* =======================================================
-     BACKEND
-     ======================================================= */
-
+  // If user searched for a specific road, auto-select it
   useEffect(() => {
-    let cancelled = false;
+    if (search.trim()) {
+      const match = roads.find((r) => r.name.toLowerCase().includes(search.toLowerCase()));
+      if (match) {
+        setSelectedRoadId(match.id);
+      }
+    }
+  }, [search, roads]);
 
-    async function loadMapData() {
-      try {
-        setLoading(true);
+  const selectedRoad = useMemo(() => {
+    return roads.find((r) => r.id === selectedRoadId);
+  }, [roads, selectedRoadId]);
 
-        const API_URL =
-          import.meta.env.VITE_API_URL ||
-          'http://localhost:5000';
+  // Derived heatmap points with weighted intensities
+  const heatmapPoints = useMemo(() => {
+    const points: [number, number, number][] = [];
 
-        const response = await fetch(
-          `${API_URL}/api/map/overview?city=${encodeURIComponent(
-            city
-          )}`
-        );
-
-        if (!response.ok) {
-          throw new Error('Map API unavailable');
-        }
-
-        const result = await response.json();
-
-        if (!cancelled) {
-          setData(result);
-          setApiOnline(true);
-        }
-      } catch {
-        if (!cancelled) {
-          setData(demoData);
-          setApiOnline(false);
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
+    // 1. Road risk coordinates
+    for (const road of roads) {
+      const intensity = Math.max(0.15, Math.min(1.0, road.score / 100));
+      if (road.coordinates && road.coordinates.length > 0) {
+        for (const pt of road.coordinates) {
+          points.push([pt[0], pt[1], intensity]);
         }
       }
     }
 
-    loadMapData();
+    // 2. Crime reports
+    for (const crime of crimes) {
+      if (crime.lat && crime.lng) {
+        const intensity =
+          crime.severity === 'CRITICAL' ? 1.0 :
+          crime.severity === 'HIGH' ? 0.8 :
+          crime.severity === 'MODERATE' ? 0.5 : 0.3;
+        points.push([crime.lat, crime.lng, intensity]);
+      }
+    }
 
-    const interval = setInterval(
-      loadMapData,
-      30000
-    );
+    // 3. Faulty streetlights
+    for (const light of streetlights) {
+      if (light.lat && light.lng && (light.status === 'faulty' || light.status === 'broken')) {
+        points.push([light.lat, light.lng, 0.75]);
+      }
+    }
 
-    return () => {
-      cancelled = true;
-      clearInterval(interval);
-    };
-  }, [city]);
+    // 4. Community reports
+    for (const report of reports) {
+      if (report.lat && report.lng) {
+        const intensity = report.status === 'OPEN' ? 0.8 : report.status === 'VERIFIED' ? 0.6 : 0.3;
+        points.push([report.lat, report.lng, intensity]);
+      }
+    }
 
+    return points;
+  }, [roads, crimes, streetlights, reports]);
 
-  /* =======================================================
-     FILTER ROADS
-     ======================================================= */
+  const criticalRoads = roads.filter((r) => r.score >= 80).length;
+  const highRiskRoads = roads.filter((r) => r.score >= 60 && r.score < 80).length;
+  const faultyLightsCount = streetlights.filter((l) => l.status === 'faulty' || l.status === 'broken').length;
 
-  const filteredRoads = useMemo(() => {
-    return data.roads.filter((road) => {
-      const matchesSearch = road.name
-        .toLowerCase()
-        .includes(search.toLowerCase());
-
-      const matchesRisk =
-        riskFilter === 'ALL' ||
-        road.riskLevel === riskFilter;
-
-      return matchesSearch && matchesRisk;
-    });
-  }, [data.roads, search, riskFilter]);
-
-
-  /* =======================================================
-     STATS
-     ======================================================= */
-
-  const criticalRoads = data.roads.filter(
-    (r) => r.score >= 80
-  ).length;
-
-  const highRiskRoads = data.roads.filter(
-    (r) => r.score >= 60 && r.score < 80
-  ).length;
-
-  const faultyLights = data.roads.reduce(
-    (sum, road) => sum + road.faultyLights,
-    0
-  );
-
-
-  const cityData =
-    cityCoordinates[city] ||
-    cityCoordinates['New Delhi'];
-
+  const cityConfig = cityCoordinates[city] || cityCoordinates['New Delhi'] || {
+    center: [28.6315, 77.2190] as [number, number],
+    zoom: 14,
+  };
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col bg-[#070a10]">
-
-
-      {/* =================================================
-          HEADER
-      ================================================= */}
-
+    <div className="relative flex h-full min-h-0 flex-col bg-brand-dark">
+      {/* HEADER */}
       <header className="z-[1001] flex shrink-0 items-center justify-between border-b border-brand-border bg-brand-surface px-5 py-3">
-
         <div>
           <h2 className="text-lg font-semibold tracking-tight text-brand-text">
-            Live Operations — {city}
+            Live Operations — {city || 'Authority Command'}
           </h2>
-
           <p className="text-[11px] text-brand-muted">
-            Street-level safety intelligence
+            Street-level safety intelligence and real-time risk heatmap from Firestore
           </p>
         </div>
 
-
         <div className="flex items-center gap-3">
-
           {loading && (
             <span className="text-[10px] text-brand-muted">
-              Updating...
+              Syncing...
             </span>
           )}
 
-          <div
-            className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[10px] ${
-              apiOnline
-                ? 'border-green-500/20 bg-green-500/5 text-green-400'
-                : 'border-yellow-500/20 bg-yellow-500/5 text-yellow-400'
-            }`}
-          >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                apiOnline
-                  ? 'animate-pulse bg-green-400'
-                  : 'bg-yellow-400'
-              }`}
-            />
-
-            {apiOnline ? 'Live' : 'Demo Data'}
+          <div className="flex items-center gap-1.5 rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-[10px] text-green-500 font-medium">
+            <span className="h-1.5 w-1.5 animate-pulse bg-green-500 rounded-full" />
+            Live Firestore
           </div>
-
         </div>
-
       </header>
 
+      {profileError && (
+        <div className="z-[1002] bg-risk-crit/10 border-b border-risk-crit/20 px-5 py-2 text-xs text-risk-crit">
+          {profileError}
+        </div>
+      )}
 
-      {/* =================================================
-          MAP
-      ================================================= */}
-
+      {/* MAP VIEWPORT */}
       <div className="relative min-h-0 flex-1">
-
         <MapContainer
           key={city}
-          center={cityData.center}
-          zoom={cityData.zoom}
+          center={cityConfig.center}
+          zoom={cityConfig.zoom}
           zoomControl={false}
           attributionControl={true}
           style={{
             width: '100%',
             height: '100%',
-            background: '#080b12',
+            background: 'var(--brand-dark)',
           }}
         >
-
+          {/* Base: Dark Carto Map */}
           <TileLayer
-            url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
             attribution="© OpenStreetMap contributors © CARTO"
           />
 
           <ZoomControl position="bottomright" />
 
-          <MapController
-            selectedRoad={selectedRoad}
-          />
+          {/* Layer 1: Risk Heatmap */}
+          <HeatmapLayer points={heatmapPoints} show={showHeatmap} />
 
+          {/* Map auto-focus controller */}
+          <MapFocusController selectedCoordinates={selectedRoad?.coordinates} />
 
-          {/* =============================================
-              ROAD RISK OVERLAY
-          ============================================= */}
-
+          {/* Layer 2: Colored Road Risk Lines */}
           {filteredRoads.map((road) => {
-
-            const color =
-              getRiskColor(road.score);
-
-            const selected =
-              selectedRoad?.id === road.id;
+            if (!road.coordinates || road.coordinates.length < 2) return null;
+            const isSelected = selectedRoadId === road.id;
+            const color = getRiskColor(road.score);
 
             return (
-              <div key={road.id}>
-
-                {/* subtle glow underneath */}
-                <Polyline
-                  positions={road.coordinates}
-                  pathOptions={{
-                    color,
-                    weight:
-                      getRiskWeight(road.score) + 7,
-                    opacity: selected
-                      ? 0.22
-                      : 0.10,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                  }}
-                />
-
-                {/* actual risk road */}
-                <Polyline
-                  positions={road.coordinates}
-                  pathOptions={{
-                    color,
-                    weight:
-                      selected
-                        ? getRiskWeight(
-                            road.score
-                          ) + 1.5
-                        : getRiskWeight(
-                            road.score
-                          ),
-                    opacity: selected
-                      ? 1
-                      : 0.9,
-                    lineCap: 'round',
-                    lineJoin: 'round',
-                  }}
-                  eventHandlers={{
-                    click: () =>
-                      setSelectedRoad(road),
-                  }}
-                >
-
-                  <Popup>
-
-                    <div className="min-w-[180px] font-sans text-gray-900">
-
-                      <p className="text-sm font-semibold">
-                        {road.name}
-                      </p>
-
-                      <div className="mt-2 flex items-end gap-2">
-
-                        <span
-                          className="text-2xl font-bold"
-                          style={{
-                            color,
-                          }}
-                        >
-                          {road.score}
-                        </span>
-
-                        <span className="mb-1 text-[10px] text-gray-500">
-                          /100
-                        </span>
-
-                      </div>
-
-                      <p
-                        className="mt-1 text-xs font-semibold"
-                        style={{ color }}
+              <Polyline
+                key={road.id}
+                positions={road.coordinates}
+                eventHandlers={{
+                  click: () => setSelectedRoadId(road.id),
+                }}
+                pathOptions={{
+                  color,
+                  weight: getRiskWeight(road.score, isSelected),
+                  opacity: isSelected ? 1.0 : 0.92,
+                  lineCap: 'round',
+                  lineJoin: 'round',
+                  dashArray: isSelected ? '8, 4' : undefined,
+                }}
+              >
+                <Popup>
+                  <div className="min-w-[200px] font-sans text-gray-900">
+                    <div className="flex items-center justify-between border-b pb-1.5 mb-2">
+                      <p className="text-sm font-bold text-gray-900">{road.name}</p>
+                      <span
+                        className="px-2 py-0.5 rounded text-[10px] font-bold border"
+                        style={{
+                          color: getRiskColor(road.score),
+                          borderColor: `${getRiskColor(road.score)}40`,
+                          backgroundColor: `${getRiskColor(road.score)}15`,
+                        }}
                       >
-                        {getRiskLabel(
-                          road.score
-                        )}
-                      </p>
-
+                        {getRiskLabel(road.score)}
+                      </span>
                     </div>
 
-                  </Popup>
+                    <div className="flex items-baseline gap-1 mb-2">
+                      <span className="text-2xl font-black font-mono" style={{ color: getRiskColor(road.score) }}>
+                        {road.score}
+                      </span>
+                      <span className="text-xs text-gray-500">/ 100 Risk Score</span>
+                    </div>
 
-                </Polyline>
+                    <div className="grid grid-cols-2 gap-1.5 text-xs text-gray-600 mb-3 bg-gray-50 p-2 rounded border border-gray-100">
+                      <div>Faulty Lights: <b className="text-gray-900">{road.faultyLights}/{road.totalLights || 10}</b></div>
+                      <div>Crimes: <b className="text-gray-900">{road.crimeNearby}</b></div>
+                      <div>Reports: <b className="text-gray-900">{road.reports}</b></div>
+                      <div>Night Exposure: <b className="text-gray-900">{road.nightExposure}%</b></div>
+                    </div>
 
-              </div>
+                    <button
+                      onClick={() => navigate('/priority')}
+                      className="w-full py-1 text-center bg-gray-900 hover:bg-black text-white text-[11px] font-medium rounded transition"
+                    >
+                      Dispatch Intervention →
+                    </button>
+                  </div>
+                </Popup>
+              </Polyline>
             );
           })}
 
-
-          {/* =============================================
-              CRIME MARKERS
-          ============================================= */}
-
+          {/* Layer 3: Markers */}
+          {/* Crime Markers */}
           {showCrimes &&
-            data.crimes.map((crime) => {
-
+            crimes.map((crime) => {
+              if (!crime.lat || !crime.lng) return null;
               const color =
                 crime.severity === 'CRITICAL'
                   ? '#ef4444'
@@ -792,213 +374,140 @@ export default function MapPage() {
               return (
                 <CircleMarker
                   key={crime.id}
-                  center={[
-                    crime.lat,
-                    crime.lng,
-                  ]}
-                  radius={4}
+                  center={[crime.lat, crime.lng]}
+                  radius={5}
                   pathOptions={{
                     color: '#fff',
-                    weight: 1,
+                    weight: 1.5,
                     fillColor: color,
-                    fillOpacity: 1,
+                    fillOpacity: 0.95,
                   }}
                 >
-
                   <Popup>
-
-                    <div className="min-w-[150px] font-sans text-gray-900">
-
-                      <p className="text-sm font-semibold">
-                        {crime.type}
-                      </p>
-
-                      <p className="mt-1 text-xs text-gray-500">
-                        {crime.time}
-                      </p>
-
-                      <p
-                        className="mt-1 text-xs font-semibold"
-                        style={{
-                          color,
-                        }}
-                      >
-                        {crime.severity}
-                      </p>
-
+                    <div className="min-w-[170px] font-sans text-gray-900">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <AlertTriangle size={14} className="text-red-500" />
+                        <p className="text-sm font-bold text-gray-900">{crime.type}</p>
+                      </div>
+                      <p className="text-xs text-gray-700 mb-1.5">{crime.desc}</p>
+                      <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t">
+                        <span>{crime.time}</span>
+                        <span className="font-semibold" style={{ color }}>{crime.severity}</span>
+                      </div>
                     </div>
-
                   </Popup>
-
                 </CircleMarker>
               );
             })}
 
-
-          {/* =============================================
-              FAULTY LIGHTS
-          ============================================= */}
-
+          {/* Streetlight Markers */}
           {showLights &&
-            data.streetlights.map((light) => (
+            streetlights.map((light) => {
+              if (!light.lat || !light.lng) return null;
+              const isFaulty = light.status === 'faulty' || light.status === 'broken';
+              return (
+                <CircleMarker
+                  key={light.id}
+                  center={[light.lat, light.lng]}
+                  radius={4.5}
+                  pathOptions={{
+                    color: '#fff',
+                    weight: 1,
+                    fillColor: isFaulty ? '#facc15' : '#22c55e',
+                    fillOpacity: 0.95,
+                  }}
+                >
+                  <Popup>
+                    <div className="min-w-[150px] font-sans text-gray-900">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <Lightbulb size={14} className={isFaulty ? 'text-yellow-500' : 'text-green-500'} />
+                        <p className="text-sm font-semibold text-gray-900">
+                          Light: <span className="capitalize">{light.status}</span>
+                        </p>
+                      </div>
+                      <p className="text-xs text-gray-500">{light.road}</p>
+                    </div>
+                  </Popup>
+                </CircleMarker>
+              );
+            })}
 
-              <CircleMarker
-                key={light.id}
-                center={[
-                  light.lat,
-                  light.lng,
-                ]}
-                radius={4}
-                pathOptions={{
-                  color: '#fff',
-                  weight: 1,
-                  fillColor: '#facc15',
-                  fillOpacity: 1,
-                }}
-              >
-
-                <Popup>
-
-                  <div className="font-sans text-gray-900">
-
-                    <p className="text-sm font-semibold">
-                      Faulty Streetlight
-                    </p>
-
-                    <p className="mt-1 text-xs text-gray-500">
-                      {light.road}
-                    </p>
-
-                  </div>
-
-                </Popup>
-
-              </CircleMarker>
-
-            ))}
-
-
-          {/* =============================================
-              COMMUNITY REPORTS
-          ============================================= */}
-
+          {/* Community Reports Markers */}
           {showReports &&
-            data.reports.map((report) => (
-
-              <CircleMarker
-                key={report.id}
-                center={[
-                  report.lat,
-                  report.lng,
-                ]}
-                radius={4}
-                pathOptions={{
-                  color: '#fff',
-                  weight: 1,
-                  fillColor: '#a78bfa',
-                  fillOpacity: 1,
-                }}
-              >
-
-                <Popup>
-
-                  <div className="font-sans text-gray-900">
-
-                    <p className="text-sm font-semibold">
-                      {report.type}
-                    </p>
-
-                    <p className="mt-1 text-xs text-gray-500">
-                      {report.time}
-                    </p>
-
-                    <p className="mt-1 text-xs font-semibold text-purple-600">
-                      {report.status}
-                    </p>
-
-                  </div>
-
-                </Popup>
-
-              </CircleMarker>
-
-            ))}
-
+            reports.map((report) => {
+              if (!report.lat || !report.lng) return null;
+              return (
+                <CircleMarker
+                  key={report.id}
+                  center={[report.lat, report.lng]}
+                  radius={5}
+                  pathOptions={{
+                    color: '#fff',
+                    weight: 1.5,
+                    fillColor: '#8b5cf6',
+                    fillOpacity: 0.95,
+                  }}
+                >
+                  <Popup>
+                    <div className="min-w-[180px] font-sans text-gray-900">
+                      <div className="flex items-center gap-1.5 mb-1">
+                        <FileText size={14} className="text-purple-500" />
+                        <p className="text-sm font-bold text-gray-900">{report.type}</p>
+                      </div>
+                      <p className="text-xs text-gray-700 mb-1.5">{report.desc}</p>
+                      <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t">
+                        <span>{report.time}</span>
+                        <span className="font-semibold text-purple-600">Status: {report.status}</span>
+                      </div>
+                      {report.photoUrls && report.photoUrls.length > 0 && (
+                        <div className="mt-2">
+                          <img
+                            src={report.photoUrls[0]}
+                            alt="Report evidence"
+                            className="h-20 w-full object-cover rounded border"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </Popup>
+                </CircleMarker>
+              );
+            })}
         </MapContainer>
 
-
-        {/* =================================================
-            TOP LEFT STATS
-        ================================================= */}
-
+        {/* TOP LEFT STATS */}
         <div className="pointer-events-none absolute left-4 top-4 z-[1000] flex gap-2">
-
-          <MapStat
-            label="Critical Roads"
-            value={criticalRoads}
-            color="#ef4444"
-          />
-
-          <MapStat
-            label="High Risk"
-            value={highRiskRoads}
-            color="#f97316"
-          />
-
-          <MapStat
-            label="Faulty Lights"
-            value={faultyLights}
-            color="#facc15"
-          />
-
-          <MapStat
-            label="Reports"
-            value={data.reports.length}
-            color="#a78bfa"
-          />
-
+          <MapStat label="Critical Roads" value={criticalRoads} color="#ef4444" />
+          <MapStat label="High Risk" value={highRiskRoads} color="#f97316" />
+          <MapStat label="Faulty Lights" value={faultyLightsCount} color="#facc15" />
+          <MapStat label="Reports" value={reports.length} color="#8b5cf6" />
         </div>
 
-
-        {/* =================================================
-            SEARCH
-        ================================================= */}
-
-        <div className="absolute right-4 top-4 z-[1000] w-[245px]">
-
-          <div className="rounded-xl border border-white/10 bg-[#0d131e]/95 p-2 shadow-2xl backdrop-blur-xl">
-
-            <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-black/20 px-3">
-
-              <span className="text-xs text-slate-500">
-                ⌕
-              </span>
-
+        {/* SEARCH & FILTERS */}
+        <div className="absolute right-4 top-4 z-[1000] w-[250px]">
+          <div className="rounded-xl border border-brand-border bg-brand-surface/95 p-2 shadow-2xl backdrop-blur-xl">
+            <div className="flex items-center gap-2 rounded-lg border border-brand-border bg-brand-dark/50 px-3">
+              <span className="text-xs text-brand-muted">⌕</span>
               <input
                 value={search}
-                onChange={(e) =>
-                  setSearch(e.target.value)
-                }
+                onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search road..."
-                className="w-full bg-transparent py-2 text-[11px] text-white outline-none placeholder:text-slate-500"
+                className="w-full bg-transparent py-2 text-[11px] text-brand-text outline-none placeholder:text-brand-muted"
               />
-
               {search && (
                 <button
-                  onClick={() =>
-                    setSearch('')
-                  }
-                  className="text-slate-500 hover:text-white"
+                  onClick={() => {
+                    setSearch('');
+                    setSelectedRoadId(null);
+                  }}
+                  className="text-brand-muted hover:text-brand-text"
                 >
                   ×
                 </button>
               )}
-
             </div>
 
-
-            <div className="mt-2 flex gap-1">
-
+            <div className="mt-2 flex flex-wrap gap-1">
               {[
                 ['ALL', 'All'],
                 ['CRITICAL', 'Critical'],
@@ -1006,333 +515,98 @@ export default function MapPage() {
                 ['MODERATE', 'Moderate'],
                 ['LOW', 'Low'],
               ].map(([value, label]) => (
-
                 <button
                   key={value}
-                  onClick={() =>
-                    setRiskFilter(
-                      value as
-                        | 'ALL'
-                        | RiskLevel
-                    )
-                  }
+                  onClick={() => setRiskFilter(value as 'ALL' | RiskLevel)}
                   className={`rounded-md px-2 py-1 text-[8px] font-medium transition ${
                     riskFilter === value
                       ? 'bg-primary text-white'
-                      : 'bg-white/5 text-slate-400 hover:bg-white/10'
+                      : 'bg-brand-dark text-brand-muted hover:text-brand-text border border-brand-border'
                   }`}
                 >
                   {label}
                 </button>
-
               ))}
-
             </div>
-
           </div>
-
         </div>
 
-
-        {/* =================================================
-            LAYERS
-        ================================================= */}
-
-        <div className="absolute bottom-5 left-4 z-[1000] w-[180px] rounded-xl border border-white/10 bg-[#0d131e]/95 p-3 shadow-xl backdrop-blur-xl">
-
-          <p className="mb-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
+        {/* MAP LAYERS TOGGLE (HEATMAP + MARKERS) */}
+        <div className="absolute bottom-5 left-4 z-[1000] w-[190px] rounded-xl border border-brand-border bg-brand-surface/95 p-3 shadow-xl backdrop-blur-xl">
+          <p className="mb-3 text-[9px] font-semibold uppercase tracking-[0.14em] text-brand-muted">
             Map Layers
           </p>
 
+          <label className="mb-2 flex cursor-pointer items-center justify-between">
+            <span className="flex items-center gap-2 text-[10px] text-brand-text">
+              <Flame size={12} className="text-orange-500" />
+              Risk Heatmap
+            </span>
+            <input
+              type="checkbox"
+              checked={showHeatmap}
+              onChange={() => setShowHeatmap(!showHeatmap)}
+              className="accent-orange-500"
+            />
+          </label>
 
           <label className="mb-2 flex cursor-pointer items-center justify-between">
-
-            <span className="flex items-center gap-2 text-[10px] text-slate-300">
-
+            <span className="flex items-center gap-2 text-[10px] text-brand-text">
               <span className="h-2 w-2 rounded-full bg-red-500" />
-
-              Crime reports
-
+              Crimes ({crimes.length})
             </span>
-
             <input
               type="checkbox"
               checked={showCrimes}
-              onChange={() =>
-                setShowCrimes(!showCrimes)
-              }
+              onChange={() => setShowCrimes(!showCrimes)}
               className="accent-red-500"
             />
-
           </label>
 
-
           <label className="mb-2 flex cursor-pointer items-center justify-between">
-
-            <span className="flex items-center gap-2 text-[10px] text-slate-300">
-
+            <span className="flex items-center gap-2 text-[10px] text-brand-text">
               <span className="h-2 w-2 rounded-full bg-yellow-400" />
-
-              Faulty lights
-
+              Lights ({streetlights.length})
             </span>
-
             <input
               type="checkbox"
               checked={showLights}
-              onChange={() =>
-                setShowLights(!showLights)
-              }
+              onChange={() => setShowLights(!showLights)}
               className="accent-yellow-400"
             />
-
           </label>
 
-
           <label className="flex cursor-pointer items-center justify-between">
-
-            <span className="flex items-center gap-2 text-[10px] text-slate-300">
-
+            <span className="flex items-center gap-2 text-[10px] text-brand-text">
               <span className="h-2 w-2 rounded-full bg-purple-400" />
-
-              Community reports
-
+              Reports ({reports.length})
             </span>
-
             <input
               type="checkbox"
               checked={showReports}
-              onChange={() =>
-                setShowReports(!showReports)
-              }
+              onChange={() => setShowReports(!showReports)}
               className="accent-purple-400"
             />
-
           </label>
-
         </div>
 
-
-        {/* =================================================
-            ROAD DETAIL
-        ================================================= */}
-
-        {selectedRoad && (
-
-          <div className="absolute right-4 top-[105px] z-[1000] w-[290px] overflow-hidden rounded-xl border border-white/10 bg-[#0d131e]/97 shadow-2xl backdrop-blur-xl">
-
-            <div className="border-b border-white/10 p-4">
-
-              <div className="flex items-start justify-between">
-
-                <div>
-
-                  <div className="flex items-center gap-2">
-
-                    <span
-                      className="h-2 w-2 rounded-full"
-                      style={{
-                        backgroundColor:
-                          getRiskColor(
-                            selectedRoad.score
-                          ),
-                      }}
-                    />
-
-                    <h3 className="text-sm font-semibold text-white">
-                      {selectedRoad.name}
-                    </h3>
-
-                  </div>
-
-                  <p className="mt-1 text-[9px] text-slate-500">
-                    Live road risk assessment
-                  </p>
-
-                </div>
-
-
-                <button
-                  onClick={() =>
-                    setSelectedRoad(null)
-                  }
-                  className="text-lg leading-none text-slate-500 hover:text-white"
-                >
-                  ×
-                </button>
-
-              </div>
-
-
-              <div className="mt-4 flex items-end justify-between">
-
-                <div>
-
-                  <p className="text-[8px] uppercase tracking-wider text-slate-500">
-                    Risk Score
-                  </p>
-
-                  <p
-                    className="mt-1 text-3xl font-bold"
-                    style={{
-                      color:
-                        getRiskColor(
-                          selectedRoad.score
-                        ),
-                    }}
-                  >
-                    {selectedRoad.score}
-                  </p>
-
-                </div>
-
-
-                <span
-                  className="rounded-full border px-2 py-1 text-[8px] font-semibold"
-                  style={{
-                    color:
-                      getRiskColor(
-                        selectedRoad.score
-                      ),
-                    borderColor: `${getRiskColor(
-                      selectedRoad.score
-                    )}40`,
-                    backgroundColor: `${getRiskColor(
-                      selectedRoad.score
-                    )}12`,
-                  }}
-                >
-                  {getRiskLabel(
-                    selectedRoad.score
-                  )}
-                </span>
-
-              </div>
-
-
-              <div className="mt-3 h-1 overflow-hidden rounded-full bg-white/5">
-
-                <div
-                  className="h-full rounded-full"
-                  style={{
-                    width: `${selectedRoad.score}%`,
-                    backgroundColor:
-                      getRiskColor(
-                        selectedRoad.score
-                      ),
-                  }}
-                />
-
-              </div>
-
-            </div>
-
-
-            <div className="grid grid-cols-2 gap-2 p-4">
-
-              <div className="rounded-lg bg-white/[0.025] p-3">
-
-                <p className="text-[8px] uppercase text-slate-500">
-                  Lighting
-                </p>
-
-                <p className="mt-1 text-sm font-semibold text-white">
-                  {selectedRoad.faultyLights}
-                  <span className="text-slate-500">
-                    {' '}
-                    / {selectedRoad.totalLights}
-                  </span>
-                </p>
-
-              </div>
-
-
-              <div className="rounded-lg bg-white/[0.025] p-3">
-
-                <p className="text-[8px] uppercase text-slate-500">
-                  Crime
-                </p>
-
-                <p className="mt-1 text-sm font-semibold text-white">
-                  {selectedRoad.crimeNearby}
-                </p>
-
-              </div>
-
-
-              <div className="rounded-lg bg-white/[0.025] p-3">
-
-                <p className="text-[8px] uppercase text-slate-500">
-                  Reports
-                </p>
-
-                <p className="mt-1 text-sm font-semibold text-white">
-                  {selectedRoad.reports}
-                </p>
-
-              </div>
-
-
-              <div className="rounded-lg bg-white/[0.025] p-3">
-
-                <p className="text-[8px] uppercase text-slate-500">
-                  Night Exposure
-                </p>
-
-                <p className="mt-1 text-sm font-semibold text-white">
-                  {selectedRoad.nightExposure}
-                </p>
-
-              </div>
-
-            </div>
-
-
-            <div className="border-t border-white/10 p-3">
-
-              <button
-                onClick={() =>
-                  window.location.href =
-                    `/priority?road=${encodeURIComponent(
-                      selectedRoad.name
-                    )}`
-                }
-                className="w-full rounded-lg bg-primary px-3 py-2 text-[10px] font-semibold text-white transition hover:bg-primary/90"
-              >
-                Open Action Priority →
-              </button>
-
-            </div>
-
+        {/* MAP LEGEND */}
+        <div className="absolute bottom-5 right-4 z-[1000] rounded-xl border border-brand-border bg-brand-surface/95 p-3 shadow-xl backdrop-blur-xl">
+          <div className="flex items-center gap-1.5 mb-2">
+            <Shield size={12} className="text-primary" />
+            <p className="text-[9px] font-semibold uppercase tracking-[0.14em] text-brand-muted">
+              Risk Intensity
+            </p>
           </div>
 
-        )}
-
-
-        {/* =================================================
-            LEGEND
-        ================================================= */}
-
-        <div className="absolute bottom-5 right-4 z-[1000] rounded-xl border border-white/10 bg-[#0d131e]/95 p-3 shadow-xl backdrop-blur-xl">
-
-          <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Street Risk
-          </p>
-
           <div className="space-y-1.5">
-
             {[
-              ['Critical', '#ef4444'],
-              ['High', '#f97316'],
-              ['Moderate', '#eab308'],
-              ['Low', '#22c55e'],
+              ['Critical (80–100)', '#ef4444'],
+              ['High (60–79)', '#f97316'],
+              ['Moderate (30–59)', '#eab308'],
+              ['Low (0–29)', '#22c55e'],
             ].map(([label, color]) => (
-
-              <div
-                key={label}
-                className="flex items-center gap-2 text-[9px] text-slate-300"
-              >
-
+              <div key={label} className="flex items-center gap-2 text-[9px] text-brand-muted">
                 <span
                   className="h-1 w-6 rounded-full"
                   style={{
@@ -1340,53 +614,12 @@ export default function MapPage() {
                     boxShadow: `0 0 5px ${color}`,
                   }}
                 />
-
                 {label}
-
               </div>
-
             ))}
-
           </div>
-
-
-          <div className="my-2 border-t border-white/10" />
-
-
-          <div className="space-y-1.5">
-
-            <div className="flex items-center gap-2 text-[9px] text-slate-300">
-
-              <span className="h-2 w-2 rounded-full bg-red-500" />
-
-              Crime
-
-            </div>
-
-
-            <div className="flex items-center gap-2 text-[9px] text-slate-300">
-
-              <span className="h-2 w-2 rounded-full bg-yellow-400" />
-
-              Faulty light
-
-            </div>
-
-
-            <div className="flex items-center gap-2 text-[9px] text-slate-300">
-
-              <span className="h-2 w-2 rounded-full bg-purple-400" />
-
-              Community report
-
-            </div>
-
-          </div>
-
         </div>
-
       </div>
-
     </div>
   );
 }

@@ -1,3 +1,39 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    /* Minimalist Professional Light Theme */
+    --brand-dark: #f5f5f5; /* Light background */
+    --brand-surface: #ffffff; /* White cards */
+    --brand-border: #e5e5e5; /* Subtle borders */
+    --brand-text: #171717; /* Dark text */
+    --brand-muted: #525252; /* Muted text */
+    
+    /* Existing risk colors preserved */
+    --risk-low: #22c55e;
+    --risk-mod: #eab308;
+    --risk-high: #f97316;
+    --risk-crit: #ef4444;
+    
+    /* Restrained primary accent */
+    --primary: #4f46e5;
+  }
+
+  .dark {
+    /* Existing Dark Theme */
+    --brand-dark: #0a0a0a;
+    --brand-surface: #171717;
+    --brand-border: #262626;
+    --brand-text: #f5f5f5;
+    --brand-muted: #a3a3a3;
+    
+    --risk-low: #16a34a;
+    --risk-mod: #ea580c;
+    --risk-high: #dc2626;
+    --risk-crit: #991b1b;
+    
+    --primary: #2563eb;
+  }
+}

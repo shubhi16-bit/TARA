@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "seed": "node src/scripts/seedRunner.js",
+    "import-delhi-police": "node src/scripts/importDelhiPolice.js"
   },
   "dependencies": {
     "@tailwindcss/postcss": "^4.3.3",
