@@ -4,9 +4,9 @@
   "main": "index.js",
   "scripts": {
     "build": "tsc",
-    "start": "node dist/server.js",
-    "dev": "nodemon src/server.ts",
-    "seed": "ts-node seed/seedDelhi.ts"
+    "start": "node dist/src/server.js",
+    "dev": "tsx watch src/server.ts",
+    "seed": "tsx seed/seedDelhi.ts"
   },
   "keywords": [],
   "author": "",
@@ -34,6 +34,7 @@
     "@types/node": "^26.2.0",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",
+    "tsx": "^4.23.12",
     "typescript": "^7.0.2"
   }
 }
