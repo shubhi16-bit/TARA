@@ -1,16 +1,13 @@
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc, Timestamp } from 'firebase/firestore';
-import { loadFirebaseConfig } from './loadEnv';
+import * as admin from 'firebase-admin';
 
-const firebaseConfig = loadFirebaseConfig();
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+try {
+  admin.initializeApp();
+} catch {}
+
+const db = admin.firestore();
 
 const CITY_ID = "New Delhi";
 
-// ------------------------------------------------------------------
-// 1. CITIES
-// ------------------------------------------------------------------
 const cities = [
   {
     id: "city_new_delhi",
@@ -24,9 +21,6 @@ const cities = [
   }
 ];
 
-// ------------------------------------------------------------------
-// 2. ROADS (10 specific roads in Central/New Delhi)
-// ------------------------------------------------------------------
 const roads = [
   {
     id: "r1_barakhamba",
@@ -42,11 +36,11 @@ const roads = [
     reports: 2,
     nightExposure: 72,
     coordinates: [
-      [28.6315, 77.2197],
-      [28.6310, 77.2220],
-      [28.6304, 77.2245],
-      [28.6297, 77.2270],
-      [28.6290, 77.2295],
+      { lat: 28.6315, lng: 77.2197 },
+      { lat: 28.6310, lng: 77.2220 },
+      { lat: 28.6304, lng: 77.2245 },
+      { lat: 28.6297, lng: 77.2270 },
+      { lat: 28.6290, lng: 77.2295 },
     ],
   },
   {
@@ -63,11 +57,11 @@ const roads = [
     reports: 8,
     nightExposure: 38,
     coordinates: [
-      [28.6315, 77.2197],
-      [28.6300, 77.2195],
-      [28.6285, 77.2192],
-      [28.6268, 77.2190],
-      [28.6250, 77.2187],
+      { lat: 28.6315, lng: 77.2197 },
+      { lat: 28.6300, lng: 77.2195 },
+      { lat: 28.6285, lng: 77.2192 },
+      { lat: 28.6268, lng: 77.2190 },
+      { lat: 28.6250, lng: 77.2187 },
     ],
   },
   {
@@ -84,11 +78,11 @@ const roads = [
     reports: 5,
     nightExposure: 52,
     coordinates: [
-      [28.6315, 77.2197],
-      [28.6305, 77.2178],
-      [28.6293, 77.2158],
-      [28.6280, 77.2138],
-      [28.6268, 77.2118],
+      { lat: 28.6315, lng: 77.2197 },
+      { lat: 28.6305, lng: 77.2178 },
+      { lat: 28.6293, lng: 77.2158 },
+      { lat: 28.6280, lng: 77.2138 },
+      { lat: 28.6268, lng: 77.2118 },
     ],
   },
   {
@@ -105,11 +99,11 @@ const roads = [
     reports: 12,
     nightExposure: 24,
     coordinates: [
-      [28.6339, 77.2168],
-      [28.6344, 77.2157],
-      [28.6350, 77.2145],
-      [28.6357, 77.2135],
-      [28.6364, 77.2128],
+      { lat: 28.6339, lng: 77.2168 },
+      { lat: 28.6344, lng: 77.2157 },
+      { lat: 28.6350, lng: 77.2145 },
+      { lat: 28.6357, lng: 77.2135 },
+      { lat: 28.6364, lng: 77.2128 },
     ],
   },
   {
@@ -126,10 +120,10 @@ const roads = [
     reports: 3,
     nightExposure: 66,
     coordinates: [
-      [28.6315, 77.2197],
-      [28.6330, 77.2195],
-      [28.6345, 77.2192],
-      [28.6360, 77.2190],
+      { lat: 28.6315, lng: 77.2197 },
+      { lat: 28.6330, lng: 77.2195 },
+      { lat: 28.6345, lng: 77.2192 },
+      { lat: 28.6360, lng: 77.2190 },
     ],
   },
   {
@@ -146,10 +140,10 @@ const roads = [
     reports: 1,
     nightExposure: 81,
     coordinates: [
-      [28.6315, 77.2197],
-      [28.6328, 77.2210],
-      [28.6340, 77.2225],
-      [28.6352, 77.2240],
+      { lat: 28.6315, lng: 77.2197 },
+      { lat: 28.6328, lng: 77.2210 },
+      { lat: 28.6340, lng: 77.2225 },
+      { lat: 28.6352, lng: 77.2240 },
     ],
   },
   {
@@ -166,9 +160,9 @@ const roads = [
     reports: 6,
     nightExposure: 41,
     coordinates: [
-      [28.6290, 77.2295],
-      [28.6278, 77.2285],
-      [28.6268, 77.2270],
+      { lat: 28.6290, lng: 77.2295 },
+      { lat: 28.6278, lng: 77.2285 },
+      { lat: 28.6268, lng: 77.2270 },
     ],
   },
   {
@@ -185,9 +179,9 @@ const roads = [
     reports: 2,
     nightExposure: 69,
     coordinates: [
-      [28.6250, 77.2187],
-      [28.6248, 77.2165],
-      [28.6250, 77.2142],
+      { lat: 28.6250, lng: 77.2187 },
+      { lat: 28.6248, lng: 77.2165 },
+      { lat: 28.6250, lng: 77.2142 },
     ],
   },
   {
@@ -204,11 +198,11 @@ const roads = [
     reports: 15,
     nightExposure: 19,
     coordinates: [
-      [28.6462, 77.2058],
-      [28.6448, 77.2070],
-      [28.6432, 77.2084],
-      [28.6417, 77.2097],
-      [28.6401, 77.2110],
+      { lat: 28.6462, lng: 77.2058 },
+      { lat: 28.6448, lng: 77.2070 },
+      { lat: 28.6432, lng: 77.2084 },
+      { lat: 28.6417, lng: 77.2097 },
+      { lat: 28.6401, lng: 77.2110 },
     ],
   },
   {
@@ -225,73 +219,57 @@ const roads = [
     reports: 0,
     nightExposure: 88,
     coordinates: [
-      [28.6360, 77.2190],
-      [28.6358, 77.2210],
-      [28.6352, 77.2240],
+      { lat: 28.6360, lng: 77.2190 },
+      { lat: 28.6358, lng: 77.2210 },
+      { lat: 28.6352, lng: 77.2240 },
     ],
   },
 ];
 
-// ------------------------------------------------------------------
-// 3. STREETLIGHTS (32 distributed across the 10 roads)
-// ------------------------------------------------------------------
 const streetlights = [
-  // Baba Kharak Singh Marg (faulty lights: 7)
-  { id: "sl_bks_1", road: "Baba Kharak Singh Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6339, lng: 77.2168, loc: [28.6339, 77.2168], status: "faulty" },
-  { id: "sl_bks_2", road: "Baba Kharak Singh Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6344, lng: 77.2157, loc: [28.6344, 77.2157], status: "faulty" },
-  { id: "sl_bks_3", road: "Baba Kharak Singh Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6350, lng: 77.2145, loc: [28.6350, 77.2145], status: "broken" },
-  { id: "sl_bks_4", road: "Baba Kharak Singh Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6357, lng: 77.2135, loc: [28.6357, 77.2135], status: "working" },
+  { id: "sl_bks_1", road: "Baba Kharak Singh Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6339, lng: 77.2168, status: "faulty" },
+  { id: "sl_bks_2", road: "Baba Kharak Singh Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6344, lng: 77.2157, status: "faulty" },
+  { id: "sl_bks_3", road: "Baba Kharak Singh Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6350, lng: 77.2145, status: "broken" },
+  { id: "sl_bks_4", road: "Baba Kharak Singh Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6357, lng: 77.2135, status: "working" },
 
-  // Panchkuian Road (faulty lights: 8)
-  { id: "sl_panch_1", road: "Panchkuian Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6462, lng: 77.2058, loc: [28.6462, 77.2058], status: "faulty" },
-  { id: "sl_panch_2", road: "Panchkuian Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6448, lng: 77.2070, loc: [28.6448, 77.2070], status: "broken" },
-  { id: "sl_panch_3", road: "Panchkuian Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6432, lng: 77.2084, loc: [28.6432, 77.2084], status: "faulty" },
-  { id: "sl_panch_4", road: "Panchkuian Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6417, lng: 77.2097, loc: [28.6417, 77.2097], status: "working" },
+  { id: "sl_panch_1", road: "Panchkuian Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6462, lng: 77.2058, status: "faulty" },
+  { id: "sl_panch_2", road: "Panchkuian Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6448, lng: 77.2070, status: "broken" },
+  { id: "sl_panch_3", road: "Panchkuian Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6432, lng: 77.2084, status: "faulty" },
+  { id: "sl_panch_4", road: "Panchkuian Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6417, lng: 77.2097, status: "working" },
 
-  // Janpath (faulty lights: 5)
-  { id: "sl_jan_1", road: "Janpath", city: CITY_ID, cityId: CITY_ID, lat: 28.6315, lng: 77.2197, loc: [28.6315, 77.2197], status: "faulty" },
-  { id: "sl_jan_2", road: "Janpath", city: CITY_ID, cityId: CITY_ID, lat: 28.6285, lng: 77.2192, loc: [28.6285, 77.2192], status: "faulty" },
-  { id: "sl_jan_3", road: "Janpath", city: CITY_ID, cityId: CITY_ID, lat: 28.6268, lng: 77.2190, loc: [28.6268, 77.2190], status: "working" },
-  { id: "sl_jan_4", road: "Janpath", city: CITY_ID, cityId: CITY_ID, lat: 28.6250, lng: 77.2187, loc: [28.6250, 77.2187], status: "working" },
+  { id: "sl_jan_1", road: "Janpath", city: CITY_ID, cityId: CITY_ID, lat: 28.6315, lng: 77.2197, status: "faulty" },
+  { id: "sl_jan_2", road: "Janpath", city: CITY_ID, cityId: CITY_ID, lat: 28.6285, lng: 77.2192, status: "faulty" },
+  { id: "sl_jan_3", road: "Janpath", city: CITY_ID, cityId: CITY_ID, lat: 28.6268, lng: 77.2190, status: "working" },
+  { id: "sl_jan_4", road: "Janpath", city: CITY_ID, cityId: CITY_ID, lat: 28.6250, lng: 77.2187, status: "working" },
 
-  // Minto Road (faulty lights: 4)
-  { id: "sl_min_1", road: "Minto Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6290, lng: 77.2295, loc: [28.6290, 77.2295], status: "faulty" },
-  { id: "sl_min_2", road: "Minto Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6278, lng: 77.2285, loc: [28.6278, 77.2285], status: "broken" },
-  { id: "sl_min_3", road: "Minto Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6268, lng: 77.2270, loc: [28.6268, 77.2270], status: "working" },
+  { id: "sl_min_1", road: "Minto Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6290, lng: 77.2295, status: "faulty" },
+  { id: "sl_min_2", road: "Minto Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6278, lng: 77.2285, status: "broken" },
+  { id: "sl_min_3", road: "Minto Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6268, lng: 77.2270, status: "working" },
 
-  // Sansad Marg (faulty lights: 3)
-  { id: "sl_san_1", road: "Sansad Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6315, lng: 77.2197, loc: [28.6315, 77.2197], status: "faulty" },
-  { id: "sl_san_2", road: "Sansad Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6293, lng: 77.2158, loc: [28.6293, 77.2158], status: "working" },
-  { id: "sl_san_3", road: "Sansad Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6268, lng: 77.2118, loc: [28.6268, 77.2118], status: "working" },
+  { id: "sl_san_1", road: "Sansad Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6315, lng: 77.2197, status: "faulty" },
+  { id: "sl_san_2", road: "Sansad Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6293, lng: 77.2158, status: "working" },
+  { id: "sl_san_3", road: "Sansad Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6268, lng: 77.2118, status: "working" },
 
-  // Kasturba Gandhi Marg (faulty lights: 2)
-  { id: "sl_kg_1", road: "Kasturba Gandhi Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6315, lng: 77.2197, loc: [28.6315, 77.2197], status: "faulty" },
-  { id: "sl_kg_2", road: "Kasturba Gandhi Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6330, lng: 77.2195, loc: [28.6330, 77.2195], status: "working" },
-  { id: "sl_kg_3", road: "Kasturba Gandhi Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6345, lng: 77.2192, loc: [28.6345, 77.2192], status: "working" },
-  { id: "sl_kg_4", road: "Kasturba Gandhi Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6360, lng: 77.2190, loc: [28.6360, 77.2190], status: "working" },
+  { id: "sl_kg_1", road: "Kasturba Gandhi Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6315, lng: 77.2197, status: "faulty" },
+  { id: "sl_kg_2", road: "Kasturba Gandhi Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6330, lng: 77.2195, status: "working" },
+  { id: "sl_kg_3", road: "Kasturba Gandhi Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6345, lng: 77.2192, status: "working" },
+  { id: "sl_kg_4", road: "Kasturba Gandhi Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6360, lng: 77.2190, status: "working" },
 
-  // Ashoka Road (faulty lights: 1)
-  { id: "sl_ash_1", road: "Ashoka Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6250, lng: 77.2187, loc: [28.6250, 77.2187], status: "faulty" },
-  { id: "sl_ash_2", road: "Ashoka Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6248, lng: 77.2165, loc: [28.6248, 77.2165], status: "working" },
-  { id: "sl_ash_3", road: "Ashoka Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6250, lng: 77.2142, loc: [28.6250, 77.2142], status: "working" },
+  { id: "sl_ash_1", road: "Ashoka Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6250, lng: 77.2187, status: "faulty" },
+  { id: "sl_ash_2", road: "Ashoka Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6248, lng: 77.2165, status: "working" },
+  { id: "sl_ash_3", road: "Ashoka Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6250, lng: 77.2142, status: "working" },
 
-  // Barakhamba Road (faulty lights: 1)
-  { id: "sl_bar_1", road: "Barakhamba Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6315, lng: 77.2197, loc: [28.6315, 77.2197], status: "faulty" },
-  { id: "sl_bar_2", road: "Barakhamba Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6304, lng: 77.2245, loc: [28.6304, 77.2245], status: "working" },
-  { id: "sl_bar_3", road: "Barakhamba Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6290, lng: 77.2295, loc: [28.6290, 77.2295], status: "working" },
+  { id: "sl_bar_1", road: "Barakhamba Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6315, lng: 77.2197, status: "faulty" },
+  { id: "sl_bar_2", road: "Barakhamba Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6304, lng: 77.2245, status: "working" },
+  { id: "sl_bar_3", road: "Barakhamba Road", city: CITY_ID, cityId: CITY_ID, lat: 28.6290, lng: 77.2295, status: "working" },
 
-  // Tolstoy Marg (faulty lights: 0)
-  { id: "sl_tol_1", road: "Tolstoy Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6315, lng: 77.2197, loc: [28.6315, 77.2197], status: "working" },
-  { id: "sl_tol_2", road: "Tolstoy Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6340, lng: 77.2225, loc: [28.6340, 77.2225], status: "working" },
+  { id: "sl_tol_1", road: "Tolstoy Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6315, lng: 77.2197, status: "working" },
+  { id: "sl_tol_2", road: "Tolstoy Marg", city: CITY_ID, cityId: CITY_ID, lat: 28.6340, lng: 77.2225, status: "working" },
 
-  // Connaught Lane (faulty lights: 0)
-  { id: "sl_con_1", road: "Connaught Lane", city: CITY_ID, cityId: CITY_ID, lat: 28.6360, lng: 77.2190, loc: [28.6360, 77.2190], status: "working" },
-  { id: "sl_con_2", road: "Connaught Lane", city: CITY_ID, cityId: CITY_ID, lat: 28.6352, lng: 77.2240, loc: [28.6352, 77.2240], status: "working" },
+  { id: "sl_con_1", road: "Connaught Lane", city: CITY_ID, cityId: CITY_ID, lat: 28.6360, lng: 77.2190, status: "working" },
+  { id: "sl_con_2", road: "Connaught Lane", city: CITY_ID, cityId: CITY_ID, lat: 28.6352, lng: 77.2240, status: "working" },
 ];
 
-// ------------------------------------------------------------------
-// 4. CRIME REPORTS (18 realistic incidents along the network)
-// ------------------------------------------------------------------
 const crimes = [
   {
     id: "cr_theft_cp_1",
@@ -302,7 +280,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6315,
     lng: 77.2197,
-    loc: [28.6315, 77.2197],
     time: "10 mins ago",
     severity: "HIGH",
     riskRelevance: 75,
@@ -316,7 +293,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6272,
     lng: 77.2190,
-    loc: [28.6272, 77.2190],
     time: "1 hour ago",
     severity: "CRITICAL",
     riskRelevance: 85,
@@ -330,7 +306,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6432,
     lng: 77.2084,
-    loc: [28.6432, 77.2084],
     time: "3 hours ago",
     severity: "HIGH",
     riskRelevance: 80,
@@ -344,7 +319,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6295,
     lng: 77.2155,
-    loc: [28.6295, 77.2155],
     time: "5 hours ago",
     severity: "MODERATE",
     riskRelevance: 50,
@@ -358,7 +332,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6344,
     lng: 77.2157,
-    loc: [28.6344, 77.2157],
     time: "30 mins ago",
     severity: "CRITICAL",
     riskRelevance: 90,
@@ -372,7 +345,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6285,
     lng: 77.2192,
-    loc: [28.6285, 77.2192],
     time: "4 hours ago",
     severity: "HIGH",
     riskRelevance: 80,
@@ -386,7 +358,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6278,
     lng: 77.2285,
-    loc: [28.6278, 77.2285],
     time: "2 hours ago",
     severity: "HIGH",
     riskRelevance: 75,
@@ -400,7 +371,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6448,
     lng: 77.2070,
-    loc: [28.6448, 77.2070],
     time: "6 hours ago",
     severity: "CRITICAL",
     riskRelevance: 85,
@@ -414,7 +384,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6350,
     lng: 77.2145,
-    loc: [28.6350, 77.2145],
     time: "12 hours ago",
     severity: "MODERATE",
     riskRelevance: 45,
@@ -428,7 +397,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6290,
     lng: 77.2295,
-    loc: [28.6290, 77.2295],
     time: "1 day ago",
     severity: "HIGH",
     riskRelevance: 80,
@@ -442,7 +410,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6280,
     lng: 77.2138,
-    loc: [28.6280, 77.2138],
     time: "1 day ago",
     severity: "MODERATE",
     riskRelevance: 60,
@@ -456,7 +423,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6417,
     lng: 77.2097,
-    loc: [28.6417, 77.2097],
     time: "2 days ago",
     severity: "CRITICAL",
     riskRelevance: 85,
@@ -470,7 +436,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6310,
     lng: 77.2220,
-    loc: [28.6310, 77.2220],
     time: "2 days ago",
     severity: "MODERATE",
     riskRelevance: 65,
@@ -484,7 +449,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6250,
     lng: 77.2187,
-    loc: [28.6250, 77.2187],
     time: "3 days ago",
     severity: "LOW",
     riskRelevance: 40,
@@ -498,7 +462,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6268,
     lng: 77.2190,
-    loc: [28.6268, 77.2190],
     time: "3 days ago",
     severity: "HIGH",
     riskRelevance: 80,
@@ -512,7 +475,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6345,
     lng: 77.2192,
-    loc: [28.6345, 77.2192],
     time: "4 days ago",
     severity: "LOW",
     riskRelevance: 30,
@@ -526,7 +488,6 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6357,
     lng: 77.2135,
-    loc: [28.6357, 77.2135],
     time: "4 days ago",
     severity: "HIGH",
     riskRelevance: 80,
@@ -540,16 +501,12 @@ const crimes = [
     cityId: CITY_ID,
     lat: 28.6328,
     lng: 77.2210,
-    loc: [28.6328, 77.2210],
     time: "5 days ago",
     severity: "LOW",
     riskRelevance: 35,
   }
 ];
 
-// ------------------------------------------------------------------
-// 5. COMMUNITY REPORTS (18 citizen submissions)
-// ------------------------------------------------------------------
 const communityReports = [
   {
     id: "cm_rep_1",
@@ -561,7 +518,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6344,
     lng: 77.2157,
-    loc: [28.6344, 77.2157],
     status: "OPEN",
     verificationStatus: "OPEN",
     riskRelevance: 75,
@@ -579,7 +535,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6290,
     lng: 77.2191,
-    loc: [28.6290, 77.2191],
     status: "VERIFIED",
     verificationStatus: "VERIFIED",
     riskRelevance: 60,
@@ -597,7 +552,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6432,
     lng: 77.2084,
-    loc: [28.6432, 77.2084],
     status: "OPEN",
     verificationStatus: "OPEN",
     riskRelevance: 80,
@@ -615,7 +569,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6278,
     lng: 77.2285,
-    loc: [28.6278, 77.2285],
     status: "VERIFIED",
     verificationStatus: "VERIFIED",
     riskRelevance: 70,
@@ -633,7 +586,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6305,
     lng: 77.2178,
-    loc: [28.6305, 77.2178],
     status: "RESOLVED",
     verificationStatus: "RESOLVED",
     riskRelevance: 45,
@@ -651,7 +603,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6350,
     lng: 77.2145,
-    loc: [28.6350, 77.2145],
     status: "OPEN",
     verificationStatus: "OPEN",
     riskRelevance: 60,
@@ -669,7 +620,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6448,
     lng: 77.2070,
-    loc: [28.6448, 77.2070],
     status: "OPEN",
     verificationStatus: "OPEN",
     riskRelevance: 75,
@@ -687,7 +637,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6268,
     lng: 77.2190,
-    loc: [28.6268, 77.2190],
     status: "VERIFIED",
     verificationStatus: "VERIFIED",
     riskRelevance: 65,
@@ -705,7 +654,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6330,
     lng: 77.2195,
-    loc: [28.6330, 77.2195],
     status: "RESOLVED",
     verificationStatus: "RESOLVED",
     riskRelevance: 40,
@@ -723,7 +671,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6268,
     lng: 77.2270,
-    loc: [28.6268, 77.2270],
     status: "OPEN",
     verificationStatus: "OPEN",
     riskRelevance: 60,
@@ -741,7 +688,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6248,
     lng: 77.2165,
-    loc: [28.6248, 77.2165],
     status: "RESOLVED",
     verificationStatus: "RESOLVED",
     riskRelevance: 50,
@@ -759,7 +705,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6304,
     lng: 77.2245,
-    loc: [28.6304, 77.2245],
     status: "RESOLVED",
     verificationStatus: "RESOLVED",
     riskRelevance: 40,
@@ -777,7 +722,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6462,
     lng: 77.2058,
-    loc: [28.6462, 77.2058],
     status: "VERIFIED",
     verificationStatus: "VERIFIED",
     riskRelevance: 80,
@@ -795,7 +739,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6357,
     lng: 77.2135,
-    loc: [28.6357, 77.2135],
     status: "OPEN",
     verificationStatus: "OPEN",
     riskRelevance: 75,
@@ -813,7 +756,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6293,
     lng: 77.2158,
-    loc: [28.6293, 77.2158],
     status: "RESOLVED",
     verificationStatus: "RESOLVED",
     riskRelevance: 45,
@@ -831,7 +773,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6250,
     lng: 77.2187,
-    loc: [28.6250, 77.2187],
     status: "OPEN",
     verificationStatus: "OPEN",
     riskRelevance: 70,
@@ -849,7 +790,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6340,
     lng: 77.2225,
-    loc: [28.6340, 77.2225],
     status: "RESOLVED",
     verificationStatus: "RESOLVED",
     riskRelevance: 35,
@@ -867,7 +807,6 @@ const communityReports = [
     cityId: CITY_ID,
     lat: 28.6290,
     lng: 77.2295,
-    loc: [28.6290, 77.2295],
     status: "OPEN",
     verificationStatus: "OPEN",
     riskRelevance: 65,
@@ -877,9 +816,6 @@ const communityReports = [
   }
 ];
 
-// ------------------------------------------------------------------
-// 6. RISK SNAPSHOTS (7-day historical trend for Analytics)
-// ------------------------------------------------------------------
 const riskSnapshots = [
   { id: "snap_delhi_1", cityId: CITY_ID, city: CITY_ID, date: "8/16", timeLabel: "8/16", overallScore: 58, avgRiskScore: 58 },
   { id: "snap_delhi_2", cityId: CITY_ID, city: CITY_ID, date: "8/17", timeLabel: "8/17", overallScore: 54, avgRiskScore: 54 },
@@ -891,72 +827,25 @@ const riskSnapshots = [
 ];
 
 export async function runSeed(): Promise<void> {
-  console.log("========================================");
-  console.log("SEEDING TARA FIRESTORE DATABASE (NEW DELHI)");
-  console.log("========================================");
-
-  // 1. Seed Cities
-  console.log(`[1/6] Seeding ${cities.length} cities...`);
+  console.log("Seeding New Delhi with Admin SDK...");
   for (const c of cities) {
-    await setDoc(doc(db, "cities", c.id), {
-      ...c,
-      updatedAt: Timestamp.now(),
-    }, { merge: true });
+    await db.collection("cities").doc(c.id).set(c, { merge: true });
   }
-
-  // 2. Seed Roads
-  console.log(`[2/6] Seeding ${roads.length} road segments...`);
   for (const r of roads) {
-    await setDoc(doc(db, "roads", r.id), {
-      ...r,
-      updatedAt: Timestamp.now(),
-    }, { merge: true });
+    await db.collection("roads").doc(r.id).set(r, { merge: true });
   }
-
-  // 3. Seed Streetlights
-  console.log(`[3/6] Seeding ${streetlights.length} streetlights...`);
   for (const sl of streetlights) {
-    await setDoc(doc(db, "streetlights", sl.id), {
-      ...sl,
-      updatedAt: Timestamp.now(),
-    }, { merge: true });
+    await db.collection("streetlights").doc(sl.id).set(sl, { merge: true });
   }
-
-  // 4. Seed Crime Reports
-  console.log(`[4/6] Seeding ${crimes.length} crime reports...`);
   for (const cr of crimes) {
-    await setDoc(doc(db, "crimeReports", cr.id), {
-      ...cr,
-      timestamp: Timestamp.now(),
-    }, { merge: true });
+    await db.collection("crimeReports").doc(cr.id).set(cr, { merge: true });
   }
-
-  // 5. Seed Community Reports
-  console.log(`[5/6] Seeding ${communityReports.length} community reports...`);
   for (const cm of communityReports) {
-    await setDoc(doc(db, "communityReports", cm.id), {
-      ...cm,
-      timestamp: Timestamp.now(),
-    }, { merge: true });
+    await db.collection("communityReports").doc(cm.id).set(cm, { merge: true });
   }
-
-  // 6. Seed Risk Snapshots
-  console.log(`[6/6] Seeding ${riskSnapshots.length} risk snapshots...`);
   for (const snap of riskSnapshots) {
-    await setDoc(doc(db, "riskSnapshots", snap.id), {
-      ...snap,
-      timestamp: Timestamp.now(),
-    }, { merge: true });
+    await db.collection("riskSnapshots").doc(snap.id).set(snap, { merge: true });
   }
-
-  console.log("========================================");
-  console.log("SUCCESS: Firestore dataset populated for New Delhi!");
-  console.log("========================================");
+  console.log("Admin SDK Seed complete.");
 }
 
-// Auto-run if executed directly
-if (typeof window === 'undefined') {
-  runSeed().catch((err) => {
-    console.error("Error seeding Firestore:", err);
-  });
-}

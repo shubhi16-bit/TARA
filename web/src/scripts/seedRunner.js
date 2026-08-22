@@ -1,15 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, doc, setDoc, Timestamp } from 'firebase/firestore';
+import { loadFirebaseConfig } from './loadEnv.js';
 
-const firebaseConfig = {
-  apiKey: "AIzaSyCc2l1aaywbwqwnB-2TYu0iNaJLdH2eImI",
-  authDomain: "tara-3b146.firebaseapp.com",
-  projectId: "tara-3b146",
-  storageBucket: "tara-3b146.firebasestorage.app",
-  messagingSenderId: "536025525990",
-  appId: "1:536025525990:web:301fd53a0bc09b94a31527"
-};
-
+const firebaseConfig = loadFirebaseConfig();
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 

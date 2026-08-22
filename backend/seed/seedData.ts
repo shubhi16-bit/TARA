@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { calculateRiskScore } from '../src/services/riskEngine';
+import { calculateRisk } from '../src/services/riskEngine';
 
 // Make sure to set GOOGLE_APPLICATION_CREDENTIALS before running
 admin.initializeApp();
@@ -45,17 +45,19 @@ async function seed() {
 
   console.log('Seeding roads...');
   for (const road of roadSegments) {
-    const risk = calculateRiskScore({
-      lightingRisk: road.lighting_score,
-      historicalCrime: road.crime_score,
-      pedestrianExposure: road.pedestrian_exposure_score,
-      communityReports: road.community_report_score,
+    const risk = calculateRisk({
+      lightingRiskFactor: road.lighting_score,
+      crimeFactor: road.crime_score,
+      footfallExposureFactor: road.pedestrian_exposure_score,
+      communityReportsFactor: road.community_report_score,
+      recencyFactor: 50,
     });
     
     await db.collection('road_segments').doc(road.id).set({
       ...road,
-      overall_risk_score: risk.overallScore,
+      overall_risk_score: risk.score,
       risk_level: risk.riskLevel,
+      risk_factors: risk.factors,
       created_at: admin.firestore.FieldValue.serverTimestamp(),
     });
   }

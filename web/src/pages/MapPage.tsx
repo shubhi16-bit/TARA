@@ -340,12 +340,28 @@ export default function MapPage() {
                       <span className="text-xs text-gray-500">/ 100 Risk Score</span>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-1.5 text-xs text-gray-600 mb-3 bg-gray-50 p-2 rounded border border-gray-100">
+                    <div className="grid grid-cols-2 gap-1.5 text-xs text-gray-600 mb-2.5 bg-gray-50 p-2 rounded border border-gray-100">
                       <div>Faulty Lights: <b className="text-gray-900">{road.faultyLights}/{road.totalLights || 10}</b></div>
                       <div>Crimes: <b className="text-gray-900">{road.crimeNearby}</b></div>
-                      <div>Reports: <b className="text-gray-900">{road.reports}</b></div>
-                      <div>Night Exposure: <b className="text-gray-900">{road.nightExposure}%</b></div>
+                      <div>Active Reports: <b className="text-gray-900">{road.reports}</b></div>
+                      <div>Footfall Est: <b className="text-gray-900">{road.nightExposure}%</b></div>
                     </div>
+
+                    {road.factors && (
+                      <div className="mb-3 border-t border-gray-200 pt-2 text-[11px] text-gray-600">
+                        <div className="font-semibold text-gray-800 mb-1 flex items-center justify-between">
+                          <span>Calculated Risk Factors</span>
+                          <span className="text-[10px] text-gray-500 font-normal">Deterministic</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-2 gap-y-0.5 text-[10px]">
+                          <div>Crime (35%): <b className="text-gray-900">{road.factors.crime}</b></div>
+                          <div>Lighting (25%): <b className="text-gray-900">{road.factors.lighting}</b></div>
+                          <div>Reports (15%): <b className="text-gray-900">{road.factors.communityReports}</b></div>
+                          <div>Footfall (15%): <b className="text-gray-900">{road.factors.footfall}</b></div>
+                          <div className="col-span-2">Recency (10%): <b className="text-gray-900">{road.factors.recency}</b></div>
+                        </div>
+                      </div>
+                    )}
 
                     <button
                       onClick={() => navigate('/priority')}

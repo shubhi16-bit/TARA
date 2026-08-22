@@ -9,6 +9,7 @@ import { db } from '../config/firebase';
 import {
   calculateRoadRisk,
   categorizeRiskLevel,
+  parseIncidentAgeHours,
 } from './riskEngine';
 import type { RiskLevel, RiskFactorsBreakdown } from './riskEngine';
 
@@ -154,7 +155,8 @@ function formatSnapshotDate(val: any): string {
 }
 
 /**
- * Recomputes road risk scores using the deterministic TARA risk engine
+ * Recomputes road risk scores dynamically using the deterministic TARA risk engine
+ * from actual Firestore entities (streetlights, crimes, community reports, and night footfall).
  */
 function enrichRoadsWithRiskEngine(
   rawRoads: Road[],
@@ -163,56 +165,83 @@ function enrichRoadsWithRiskEngine(
   reportsList: CommunityReport[]
 ): Road[] {
   return rawRoads.map((road) => {
-    // 1. Calculate actual faulty lights associated with this road
+    const roadNameLower = road.name.toLowerCase();
+
+    // 1. Streetlights associated with this road
     const matchingLights = lights.filter(
-      (l) => (l.road && l.road.toLowerCase() === road.name.toLowerCase()) || (l.roadId && l.roadId === road.id)
+      (l) =>
+        (l.road && (l.road.toLowerCase() === roadNameLower || roadNameLower.includes(l.road.toLowerCase()) || l.road.toLowerCase().includes(roadNameLower))) ||
+        (l.roadId && l.roadId === road.id)
     );
     const faultyFromLights = matchingLights.filter(
       (l) => l.status === 'faulty' || l.status === 'broken'
     ).length;
-    const totalL = matchingLights.length > 0 ? matchingLights.length : road.totalLights || 10;
-    const faultyL = matchingLights.length > 0 ? faultyFromLights : road.faultyLights || 0;
+    const totalL = matchingLights.length > 0 ? matchingLights.length : (road.totalLights || 10);
+    const faultyL = matchingLights.length > 0 ? faultyFromLights : (road.faultyLights || 0);
 
-    // 2. Crimes count for this road
+    // 2. Crimes associated with this road
     const matchingCrimes = crimesList.filter(
-      (c) => c.desc && c.desc.toLowerCase().includes(road.name.toLowerCase())
+      (c) =>
+        (c.desc && c.desc.toLowerCase().includes(roadNameLower)) ||
+        (c.district && c.district.toLowerCase().includes(roadNameLower))
     );
-    const crimeCount = matchingCrimes.length > 0 ? matchingCrimes.length : road.crimeNearby || 0;
-    const highestCrimeSeverity = matchingCrimes.length > 0 ? matchingCrimes[0]?.severity : undefined;
+    const crimeCount = matchingCrimes.length;
 
-    // 3. Reports count for this road
+    // Determine highest crime severity
+    let highestCrimeSeverity: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL' | undefined = undefined;
+    if (matchingCrimes.some((c) => c.severity === 'CRITICAL')) {
+      highestCrimeSeverity = 'CRITICAL';
+    } else if (matchingCrimes.some((c) => c.severity === 'HIGH')) {
+      highestCrimeSeverity = 'HIGH';
+    } else if (matchingCrimes.some((c) => c.severity === 'MODERATE')) {
+      highestCrimeSeverity = 'MODERATE';
+    } else if (matchingCrimes.some((c) => c.severity === 'LOW')) {
+      highestCrimeSeverity = 'LOW';
+    }
+
+    // Determine latest incident age in hours
+    let minIncidentAgeHours: number | undefined = undefined;
+    for (const c of matchingCrimes) {
+      const age = parseIncidentAgeHours(c.time, c.timestamp);
+      if (age !== undefined && (minIncidentAgeHours === undefined || age < minIncidentAgeHours)) {
+        minIncidentAgeHours = age;
+      }
+    }
+
+    // 3. Active Community Reports (OPEN or VERIFIED only; RESOLVED reports do not contribute to risk)
     const matchingReports = reportsList.filter(
-      (r) => r.desc && r.desc.toLowerCase().includes(road.name.toLowerCase())
+      (r) =>
+        (r.desc && r.desc.toLowerCase().includes(roadNameLower)) &&
+        (r.status === 'OPEN' || r.status === 'VERIFIED')
     );
-    const reportsCount = matchingReports.length > 0 ? matchingReports.length : road.reports || 0;
+    const activeReportsCount = matchingReports.length;
 
-    // 4. Calculate deterministic risk using TARA risk engine
+    // 4. Calculate dynamic deterministic risk using TARA risk engine
+    const footfallRating = road.nightExposure !== undefined ? road.nightExposure : 50;
+
     const riskResult = calculateRoadRisk({
       faultyLights: faultyL,
       totalLights: totalL,
       crimeCount,
       highestCrimeSeverity,
-      reportsCount,
-      footfallRating: road.nightExposure || 45,
+      reportsCount: activeReportsCount,
+      footfallRating,
+      lastIncidentAgeHours: minIncidentAgeHours,
     });
-
-    const score = road.score > 0 && riskResult.score === 0 ? road.score : riskResult.score;
-    const finalLevel = categorizeRiskLevel(score);
 
     return {
       ...road,
-      score: finalScore(score),
-      riskLevel: finalLevel,
+      score: riskResult.score,
+      safetyScore: 100 - riskResult.score,
+      riskLevel: riskResult.riskLevel,
       factors: riskResult.factors,
       faultyLights: faultyL,
       totalLights: totalL,
-      reports: reportsCount,
+      crimeNearby: crimeCount,
+      reports: activeReportsCount,
+      nightExposure: footfallRating,
     };
   });
-}
-
-function finalScore(s: number): number {
-  return Math.max(0, Math.min(100, s));
 }
 
 /**
@@ -232,6 +261,27 @@ export function subscribeToCityData(
 
   const emit = () => {
     const enrichedRoads = enrichRoadsWithRiskEngine(rawRoads, streetlights, crimes, reports);
+
+    // Development-only verification logging showing raw factors & final score for each road
+    if (enrichedRoads.length > 0 && typeof console !== 'undefined' && console.table) {
+      console.groupCollapsed(
+        `[TARA Live Risk Engine] Dynamic recalculation for ${enrichedRoads.length} roads (${new Date().toLocaleTimeString()})`
+      );
+      console.table(
+        enrichedRoads.map((r) => ({
+          'Road Name': r.name,
+          'Crime Factor (35%)': r.factors?.crime ?? 0,
+          'Lighting Factor (25%)': r.factors?.lighting ?? 0,
+          'Community Reports (15%)': r.factors?.communityReports ?? 0,
+          'Footfall Risk (15%)': r.factors?.footfall ?? 0,
+          'Recency Factor (10%)': r.factors?.recency ?? 0,
+          'Final Score': r.score,
+          'Risk Level': r.riskLevel,
+        }))
+      );
+      console.groupEnd();
+    }
+
     onData({
       roads: enrichedRoads,
       crimes,

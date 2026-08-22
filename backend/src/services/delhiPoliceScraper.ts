@@ -1,14 +1,35 @@
 import https from 'https';
 import crypto from 'crypto';
-import { initializeApp } from 'firebase/app';
-import { getFirestore, doc, setDoc } from 'firebase/firestore';
-import { loadFirebaseConfig } from './loadEnv.js';
+import { db } from '../config/firebase';
 
-const firebaseConfig = loadFirebaseConfig();
-const app = initializeApp(firebaseConfig);
-const db = getFirestore(app);
+export interface DelhiPoliceCrimeRecord {
+  id: string;
+  sNo?: string;
+  pressDate: string;
+  title: string;
+  desc: string;
+  district: string;
+  policeStation: string;
+  category: string;
+  type: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW';
+  riskRelevance: number;
+  city: string;
+  cityId: string;
+  source: string;
+  sourceUrl: string;
+  timestamp: Date;
+  time: string;
+  lat: null;
+  lng: null;
+  loc: null;
+}
 
-function normalizeCategoryAndSeverity(category, title) {
+function normalizeCategoryAndSeverity(category: string, title: string): {
+  type: string;
+  severity: 'CRITICAL' | 'HIGH' | 'MODERATE' | 'LOW';
+  riskRelevance: number;
+} {
   const combined = `${category} ${title}`.toLowerCase();
 
   if (combined.includes('murder') || combined.includes('rape') || combined.includes('assault') || combined.includes('women') || combined.includes('stalking')) {
@@ -66,7 +87,8 @@ function normalizeCategoryAndSeverity(category, title) {
   };
 }
 
-function parseDate(dateStr) {
+function parseDate(dateStr: string): Date {
+  // e.g. "22/08/2026" or "22-08-2026"
   try {
     const clean = dateStr.trim();
     const parts = clean.includes('/') ? clean.split('/') : clean.split('-');
@@ -83,27 +105,57 @@ function parseDate(dateStr) {
   return new Date();
 }
 
-async function fetchDelhiPoliceHtml() {
+/**
+ * Fetch and parse press releases directly from Delhi Police portal
+ */
+export async function fetchDelhiPolicePressReleases(): Promise<DelhiPoliceCrimeRecord[]> {
   const url = 'https://www.delhipolice.gov.in/newpressrelease';
+
   return new Promise((resolve, reject) => {
-    https.get(url, { rejectUnauthorized: false }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve(data));
-    }).on('error', err => reject(err));
+    const req = https.get(url, { rejectUnauthorized: false, timeout: 15000 }, (res) => {
+      let html = '';
+      res.on('data', (chunk) => {
+        html += chunk;
+      });
+
+      res.on('end', () => {
+        try {
+          const records = parseHtmlPressReleases(html);
+          resolve(records);
+        } catch (parseErr) {
+          reject(parseErr);
+        }
+      });
+    });
+
+    req.on('error', (err) => {
+      reject(err);
+    });
+
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Delhi Police portal request timed out'));
+    });
   });
 }
 
-function parsePressReleases(html) {
-  const records = [];
+/**
+ * Extract crime rows from official table markup
+ */
+function parseHtmlPressReleases(html: string): DelhiPoliceCrimeRecord[] {
+  const records: DelhiPoliceCrimeRecord[] = [];
+
+  // Match table rows: <tr class="RowStyle"> or <tr class="AltRowStyle">
   const rowRegex = /<tr class="(?:RowStyle|AltRowStyle)"[\s\S]*?<\/tr>/gi;
   const rows = html.match(rowRegex) || [];
 
   for (const row of rows) {
+    // Extract all <td> cells
     const tdMatches = row.match(/<td[\s\S]*?<\/td>/gi) || [];
     if (tdMatches.length < 6) continue;
 
-    const cleanText = (raw) => {
+    // Helper to strip tags & HTML entities
+    const cleanText = (raw: string) => {
       return raw
         .replace(/<[^>]+>/g, '')
         .replace(/&#39;/g, "'")
@@ -114,17 +166,19 @@ function parsePressReleases(html) {
         .trim();
     };
 
-    const sNo = cleanText(tdMatches[0]);
-    const pressDate = cleanText(tdMatches[1]);
-    const title = cleanText(tdMatches[2]);
-    const district = cleanText(tdMatches[3]);
-    const policeStation = cleanText(tdMatches[4]);
-    const category = cleanText(tdMatches[5]);
+    const sNo = cleanText(tdMatches[0] || '');
+    const pressDate = cleanText(tdMatches[1] || '');
+    const title = cleanText(tdMatches[2] || '');
+    const district = cleanText(tdMatches[3] || '');
+    const policeStation = cleanText(tdMatches[4] || '');
+    const category = cleanText(tdMatches[5] || '');
 
     if (!title || !pressDate) continue;
 
     const { type, severity, riskRelevance } = normalizeCategoryAndSeverity(category, title);
     const dateObj = parseDate(pressDate);
+
+    // Create deterministic ID using MD5 hash of date + title
     const idHash = crypto.createHash('md5').update(`${pressDate}_${title}`).digest('hex').substring(0, 12);
     const id = `dp_${idHash}`;
 
@@ -155,36 +209,34 @@ function parsePressReleases(html) {
   return records;
 }
 
-export async function runImport() {
-  console.log("=================================================");
-  console.log("IMPORTING REAL DELHI POLICE CRIME DATA TO FIRESTORE");
-  console.log("Source: https://www.delhipolice.gov.in/newpressrelease");
-  console.log("=================================================");
+/**
+ * Fetch from Delhi Police and store into Firestore crimeReports collection
+ */
+export async function syncDelhiPoliceCrimeData(): Promise<{
+  success: boolean;
+  totalFetched: number;
+  insertedOrUpdated: number;
+  records: DelhiPoliceCrimeRecord[];
+}> {
+  const records = await fetchDelhiPolicePressReleases();
+  let count = 0;
 
-  console.log("Fetching official press releases from Delhi Police portal...");
-  const html = await fetchDelhiPoliceHtml();
-  const records = parsePressReleases(html);
-
-  console.log(`Parsed ${records.length} official press releases.`);
-  console.log("Syncing into Firestore collection 'crimeReports'...");
-
-  let inserted = 0;
   for (const record of records) {
-    const docRef = doc(db, "crimeReports", record.id);
-    await setDoc(docRef, {
-      ...record,
-      importedAt: new Date(),
-    }, { merge: true });
-    inserted++;
+    const docRef = db.collection('crimeReports').doc(record.id);
+    await docRef.set(
+      {
+        ...record,
+        updatedAt: new Date(),
+      },
+      { merge: true }
+    );
+    count++;
   }
 
-  console.log(`Successfully synced ${inserted} official crime records into Firestore.`);
-  console.log("=================================================");
-  process.exit(0);
+  return {
+    success: true,
+    totalFetched: records.length,
+    insertedOrUpdated: count,
+    records,
+  };
 }
-
-runImport().catch(err => {
-  console.error("Failed to import Delhi Police crime data:", err);
-  process.exit(1);
-});
-
