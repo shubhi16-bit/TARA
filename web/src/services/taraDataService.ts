@@ -222,12 +222,44 @@ function enrichRoadsWithRiskEngine(
       }
     }
 
-    // 3. Active Community Reports (OPEN or VERIFIED only; RESOLVED reports do not contribute to risk)
-    const matchingReports = reportsList.filter(
-      (r) =>
-        (r.desc && r.desc.toLowerCase().includes(roadNameLower)) &&
-        (r.status === 'OPEN' || r.status === 'VERIFIED')
-    );
+    // 3. Active Community Reports (OPEN, VERIFIED, logged, inReview, inRepair; RESOLVED reports do not contribute to risk)
+    const matchingReports = reportsList.filter((r) => {
+      const isResolved = (r.status || '').toLowerCase() === 'resolved';
+      if (isResolved) return false;
+
+      // 1. Direct match by roadId
+      if (r.roadId && r.roadId === road.id) return true;
+
+      // 2. Direct match by road name
+      if (r.road && (r.road.toLowerCase() === roadNameLower || roadNameLower.includes(r.road.toLowerCase()) || r.road.toLowerCase().includes(roadNameLower))) {
+        return true;
+      }
+
+      // 3. Textual mentions in location, notes, or desc
+      if (
+        (r.location && r.location.toLowerCase().includes(roadNameLower)) ||
+        (r.desc && r.desc.toLowerCase().includes(roadNameLower)) ||
+        (r.notes && r.notes.toLowerCase().includes(roadNameLower))
+      ) {
+        return true;
+      }
+
+      // 4. Geographic proximity matching (within ~400m)
+      if (r.lat && r.lng && Array.isArray(road.coordinates)) {
+        for (const pt of road.coordinates) {
+          const pLat = Array.isArray(pt) ? pt[0] : ((pt as any)?.lat || (pt as any)?.latitude);
+          const pLng = Array.isArray(pt) ? pt[1] : ((pt as any)?.lng || (pt as any)?.longitude);
+          if (pLat && pLng) {
+            const dist = Math.hypot(r.lat - pLat, r.lng - pLng);
+            if (dist < 0.004) {
+              return true;
+            }
+          }
+        }
+      }
+
+      return false;
+    });
     const activeReportsCount = matchingReports.length;
 
     // 4. Calculate dynamic deterministic risk using TARA risk engine

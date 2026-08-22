@@ -34,13 +34,13 @@ function calculateRiskRelevance(type: string): number {
  */
 async function findNearestRoad(lat: number, lng: number, fallbackCity: string = 'New Delhi') {
   try {
-    if (!lat || !lng) return { nearestRoad: null, nearestCity: fallbackCity };
+    if (!lat || !lng) return { nearestRoad: null, nearestCity: fallbackCity, minDistance: Infinity };
 
     const roadsSnap = await db.collection('roads').get();
-    let roads = roadsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    let roads = roadsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
     if (roads.length === 0) {
       const segSnap = await db.collection('road_segments').get();
-      roads = segSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      roads = segSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
     }
 
     let closestRoad: any = null;
@@ -71,10 +71,10 @@ async function findNearestRoad(lat: number, lng: number, fallbackCity: string = 
     }
 
     const nearestCity = closestRoad?.city || closestRoad?.cityId || fallbackCity;
-    return { nearestRoad: closestRoad, nearestCity };
+    return { nearestRoad: closestRoad, nearestCity, minDistance };
   } catch (err) {
     console.warn('Error resolving nearest road:', err);
-    return { nearestRoad: null, nearestCity: fallbackCity };
+    return { nearestRoad: null, nearestCity: fallbackCity, minDistance: Infinity };
   }
 }
 
@@ -125,7 +125,7 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
     else if (reportType.toLowerCase().includes('multiple')) parsedLightsDown = 3;
 
     // Resolve nearest road dynamically
-    const { nearestRoad, nearestCity } = await findNearestRoad(reportLat, reportLng, cityId || city || 'New Delhi');
+    const { nearestRoad, nearestCity, minDistance } = await findNearestRoad(reportLat, reportLng, cityId || city || 'New Delhi');
 
     const reportRef = db.collection('communityReports').doc();
     const reportId = reportRef.id;
@@ -189,11 +189,14 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
       notes: reportNotes,
       lightsDown: parsedLightsDown,
       loc: [reportLat, reportLng],
+      lat: reportLat,
+      lng: reportLng,
       latitude: reportLat,
       longitude: reportLng,
       location: reportLocation,
       locationAddress: reportLocation,
       road: nearestRoad?.name || nearestRoad?.road_name || '',
+      roadName: nearestRoad?.name || nearestRoad?.road_name || '',
       roadId: nearestRoad?.id || '',
       cityId: nearestCity,
       city: nearestCity,
@@ -210,7 +213,13 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
     // Store ONLY in communityReports (NEVER touch crimeReports)
     await reportRef.set(reportData);
 
-    console.log(`[CITIZEN REPORT] Created communityReport ${reportId} for user ${reportUserId} near ${reportData.road || reportData.city}`);
+    console.log(`[TARA REPORT DEBUG]`);
+    console.log(`Report ID: ${reportId}`);
+    console.log(`Coordinates: (${reportLat}, ${reportLng})`);
+    console.log(`City: ${nearestCity}`);
+    console.log(`Nearest Road: ${nearestRoad?.name || 'None'}`);
+    console.log(`Distance: ${minDistance}`);
+    console.log(`Firestore ID: ${reportId}`);
 
     res.status(201).json({
       success: true,
@@ -406,7 +415,7 @@ router.get('/streetlights', async (req, res) => {
   try {
     const { city } = req.query;
     const snapshot = await db.collection('streetlights').get();
-    let lights = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    let lights = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
     if (city && typeof city === 'string') {
       lights = lights.filter((l: any) => !l.city || l.city.toLowerCase() === city.toLowerCase());
     }
@@ -451,10 +460,10 @@ router.put('/streetlights/:id', async (req, res) => {
 router.get('/roads', async (req, res) => {
   try {
     const snapshot = await db.collection('roads').get();
-    let roads = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+    let roads = snapshot.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
     if (roads.length === 0) {
       const segSnap = await db.collection('road_segments').get();
-      roads = segSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+      roads = segSnap.docs.map((doc: any) => ({ id: doc.id, ...doc.data() }));
     }
     res.json(roads);
   } catch (error) {
@@ -474,15 +483,15 @@ router.get('/map/overview', async (req, res) => {
       db.collection('communityReports').get(),
     ]);
 
-    let rawRoads = roadsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    let rawRoads = roadsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
     if (rawRoads.length === 0) {
       const segSnap = await db.collection('road_segments').get();
-      rawRoads = segSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      rawRoads = segSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
     }
 
-    const streetlights = lightsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const crimes = crimesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
-    const reports = reportsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const streetlights = lightsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    const crimes = crimesSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
+    const reports = reportsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
 
     const filteredRoads = rawRoads.filter((r: any) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase());
     const filteredLights = streetlights.filter((l: any) => !city || !l.city || l.city.toLowerCase() === city.toLowerCase());
@@ -566,13 +575,13 @@ router.get('/dark-zones', async (req, res) => {
       db.collection('streetlights').get(),
     ]);
 
-    let rawRoads = roadsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    let rawRoads = roadsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
     if (rawRoads.length === 0) {
       const segSnap = await db.collection('road_segments').get();
-      rawRoads = segSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+      rawRoads = segSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
     }
 
-    const lights = lightsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    const lights = lightsSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }));
 
     const darkZones = rawRoads.map((road: any, idx: number) => {
       const matchingLights = lights.filter(

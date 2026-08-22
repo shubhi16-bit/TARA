@@ -468,17 +468,20 @@ export default function MapPage() {
                     <div className="min-w-[180px] font-sans text-gray-900">
                       <div className="flex items-center gap-1.5 mb-1">
                         <FileText size={14} className="text-purple-500" />
-                        <p className="text-sm font-bold text-gray-900">{report.type}</p>
+                        <p className="text-sm font-bold text-gray-900">{report.issueType || report.type}</p>
                       </div>
-                      <p className="text-xs text-gray-700 mb-1.5">{report.desc}</p>
+                      {report.road && (
+                        <p className="text-[11px] font-semibold text-purple-700 mb-0.5">📍 {report.road}</p>
+                      )}
+                      <p className="text-xs text-gray-700 mb-1.5">{report.notes || report.desc}</p>
                       <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t">
                         <span>{report.time}</span>
-                        <span className="font-semibold text-purple-600">Status: {report.status}</span>
+                        <span className="font-semibold text-purple-600 uppercase">Status: {report.status}</span>
                       </div>
-                      {report.photoUrls && report.photoUrls.length > 0 && (
+                      {(report.imageUrl || (report.photoUrls && report.photoUrls.length > 0)) && (
                         <div className="mt-2">
                           <img
-                            src={report.photoUrls[0]}
+                            src={report.imageUrl || (report.photoUrls ? report.photoUrls[0] : '')}
                             alt="Report evidence"
                             className="h-20 w-full object-cover rounded border"
                           />
