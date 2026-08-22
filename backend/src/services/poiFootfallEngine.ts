@@ -110,6 +110,12 @@ export const DELHI_POIS: POI[] = [
   { id: 'poi_govt_rail', name: 'Rail Bhavan', category: 'GOVT_OFFICE', lat: 28.6198, lng: 77.2120, cityId: 'delhi' },
   { id: 'poi_govt_shastri', name: 'Shastri Bhavan', category: 'GOVT_OFFICE', lat: 28.6185, lng: 77.2140, cityId: 'delhi' },
   { id: 'poi_govt_patel', name: 'Patel Chowk Administrative Block', category: 'GOVT_OFFICE', lat: 28.6240, lng: 77.2125, cityId: 'delhi' },
+
+  // 9. South-Central Delhi & Ring Road POIs (Lajpat Nagar Sector)
+  { id: 'poi_metro_lajpat', name: 'Lajpat Nagar Metro Interchange (Pink & Violet)', category: 'TRANSIT_HUB', lat: 28.5705, lng: 77.2375, cityId: 'delhi' },
+  { id: 'poi_mkt_lajpat_central', name: 'Lajpat Nagar Central Market & Street Food', category: 'MARKET', lat: 28.5677, lng: 77.2433, cityId: 'delhi' },
+  { id: 'poi_hosp_moolchand', name: 'Moolchand Medcity & 24x7 Emergency', category: 'HOSPITAL', lat: 28.5655, lng: 77.2340, cityId: 'delhi' },
+  { id: 'poi_bus_lajpat_ring', name: 'Lajpat Nagar Ring Road Bus Terminal', category: 'BUS_STOP', lat: 28.5695, lng: 77.2410, cityId: 'delhi' },
 ];
 
 /**
