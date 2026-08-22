@@ -45,7 +45,7 @@ class _OsrmResult {
 }
 
 class RoutingProvider extends ChangeNotifier {
-  String backendBaseUrl = 'http://10.0.2.2:5000/api';
+  String backendBaseUrl = 'http://localhost:5000/api';
   bool _disposed = false;
 
   void _notify() {
