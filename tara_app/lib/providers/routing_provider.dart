@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import '../models/dark_zone_model.dart';
 import '../models/route_model.dart';
+import '../config/app_config.dart';
 
 enum MapStyleType { googleStandard, googleSatellite, googleTerrain }
 
@@ -45,7 +46,7 @@ class _OsrmResult {
 }
 
 class RoutingProvider extends ChangeNotifier {
-  String backendBaseUrl = 'http://localhost:5000/api';
+  String backendBaseUrl = AppConfig.apiBaseUrl;
   bool _disposed = false;
 
   void _notify() {

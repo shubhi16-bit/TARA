@@ -55,7 +55,7 @@ export default function Login() {
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full bg-brand-dark border border-brand-border rounded px-4 py-2 text-brand-text focus:outline-none focus:border-risk-mod transition-colors"
-              placeholder="authority@city.gov"
+              placeholder="authority@tara.gov.in"
               required
               disabled={loading}
             />
@@ -67,7 +67,7 @@ export default function Login() {
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full bg-brand-dark border border-brand-border rounded px-4 py-2 text-brand-text focus:outline-none focus:border-risk-mod transition-colors"
-              placeholder="••••••••"
+              placeholder="TARA@2026Demo"
               required
               disabled={loading}
             />

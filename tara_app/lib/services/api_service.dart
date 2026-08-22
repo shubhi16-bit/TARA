@@ -5,14 +5,15 @@ import 'package:http/http.dart' as http;
 import '../models/report_model.dart';
 import '../models/dark_zone_model.dart';
 import 'package:latlong2/latlong.dart';
+import '../config/app_config.dart';
 
 class ApiService {
   static final ApiService _instance = ApiService._internal();
   factory ApiService() => _instance;
   ApiService._internal();
 
-  /// Default API URL (works with adb reverse on Android and on Web)
-  String baseUrl = 'http://localhost:5000/api';
+  /// API URL initialized from AppConfig
+  String baseUrl = AppConfig.apiBaseUrl;
 
   void setBaseUrl(String newUrl) {
     baseUrl = newUrl;

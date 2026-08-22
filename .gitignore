@@ -12,3 +12,5 @@ serviceAccountKey*.json
 .DS_Store
 .idea
 .vscode/
+.kotlin/
+.gradle/

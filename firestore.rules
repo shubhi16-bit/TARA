@@ -1,0 +1,73 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check authority authentication
+    function isAuthority() {
+      return request.auth != null;
+    }
+
+    // Authorities collection
+    match /authorities/{authorityId} {
+      allow read, write: if isAuthority();
+    }
+
+    // Cities configuration
+    match /cities/{cityId} {
+      allow read: if true;
+      allow write: if isAuthority();
+    }
+
+    // Monitored Roads and calculated risk data
+    match /roads/{roadId} {
+      allow read: if true;
+      allow write: if isAuthority();
+    }
+
+    // Road segments
+    match /road_segments/{segmentId} {
+      allow read: if true;
+      allow write: if isAuthority();
+    }
+
+    // Streetlights
+    match /streetlights/{lightId} {
+      allow read: if true;
+      allow write: if isAuthority();
+    }
+
+    // Official Crime Reports (Read-only for users, written only by backend/authorities)
+    match /crimeReports/{crimeId} {
+      allow read: if true;
+      allow write: if isAuthority();
+    }
+
+    // Citizen Community Infrastructure Reports
+    // Public read for live safety awareness; creation allowed directly or via backend
+    match /communityReports/{reportId} {
+      allow read: if true;
+      allow create: if request.resource.data.type is string 
+                    || request.resource.data.issueType is string;
+      allow update, delete: if isAuthority();
+    }
+
+    // Legacy reports collection fallback
+    match /reports/{reportId} {
+      allow read: if true;
+      allow create: if true;
+      allow update, delete: if isAuthority();
+    }
+
+    // Periodic Risk Engine Snapshots
+    match /riskSnapshots/{snapshotId} {
+      allow read: if true;
+      allow write: if isAuthority();
+    }
+
+    // Authority Dispatch and Maintenance Actions
+    match /authorityActions/{actionId} {
+      allow read, write: if isAuthority();
+    }
+  }
+}
+
