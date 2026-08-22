@@ -383,29 +383,36 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
               onPressed: _isSubmitting
                   ? null
                   : () async {
+                      final messenger = ScaffoldMessenger.of(context);
+                      final successMsg = lang.tr('reportSubmitted');
+                      final issueTypeName = lang.tr(_issueKeys[_selectedIssueTypeIndex]);
+                      final currentAddr = routing.currentAddress;
+                      final currentLat = routing.currentLocation.latitude;
+                      final currentLng = routing.currentLocation.longitude;
+                      final notesText = _notesController.text.trim().isEmpty
+                          ? 'Reported via TARA App'
+                          : _notesController.text.trim();
+                      final photoPath = _selectedImage?.path;
+
                       setState(() => _isSubmitting = true);
 
                       await reportsProvider.submitReport(
-                        issueType: lang.tr(_issueKeys[_selectedIssueTypeIndex]),
-                        locationAddress: routing.currentAddress,
-                        latitude: routing.currentLocation.latitude,
-                        longitude: routing.currentLocation.longitude,
-                        notes: _notesController.text.trim().isEmpty
-                            ? 'Reported via TARA App'
-                            : _notesController.text.trim(),
-                        imagePath: _selectedImage?.path,
+                        issueType: issueTypeName,
+                        locationAddress: currentAddr,
+                        latitude: currentLat,
+                        longitude: currentLng,
+                        notes: notesText,
+                        imagePath: photoPath,
                       );
 
                       if (!mounted) return;
-                      final scaffoldMessenger = ScaffoldMessenger.of(context);
-                      final successMsg = lang.tr('reportSubmitted');
                       setState(() {
                         _isSubmitting = false;
                         _selectedImage = null;
                         _notesController.clear();
                       });
 
-                      scaffoldMessenger.showSnackBar(
+                      messenger.showSnackBar(
                         SnackBar(
                           content: Text(successMsg),
                           backgroundColor: AppColors.navActive,

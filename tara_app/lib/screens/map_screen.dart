@@ -238,7 +238,7 @@ class _MapScreenState extends State<MapScreen> {
                     height: 44,
                     child: Container(
                       decoration: BoxDecoration(
-                        color: Colors.blue.withOpacity(0.2),
+                        color: Colors.blue.withAlpha(51),
                         shape: BoxShape.circle,
                       ),
                       child: Center(

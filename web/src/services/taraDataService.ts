@@ -68,15 +68,26 @@ export interface Streetlight {
 export interface CommunityReport {
   id: string;
   type: string;
+  issueType?: string;
   desc?: string;
+  notes?: string;
   lat: number;
   lng: number;
   time: string;
-  status: 'OPEN' | 'VERIFIED' | 'RESOLVED';
+  status: 'OPEN' | 'VERIFIED' | 'RESOLVED' | 'logged' | 'inReview' | 'inRepair' | 'resolved';
+  verificationStatus?: string;
   photoUrls?: string[];
+  imageUrl?: string;
   city?: string;
+  cityId?: string;
+  road?: string;
+  roadId?: string;
+  lightsDown?: number;
+  userId?: string;
+  userPhone?: string;
   timestamp?: any;
   adminNotes?: string;
+  riskRelevance?: number;
 }
 
 export interface RiskSnapshot {
@@ -479,46 +490,70 @@ export function subscribeToCityData(
         reports = snap.docs
           .map((d) => {
             const data = d.data();
-            const lat = data.lat || (Array.isArray(data.loc) ? data.loc[0] : 0);
-            const lng = data.lng || (Array.isArray(data.loc) ? data.loc[1] : 0);
+            const lat = data.lat || data.latitude || (Array.isArray(data.loc) ? data.loc[0] : 0);
+            const lng = data.lng || data.longitude || (Array.isArray(data.loc) ? data.loc[1] : 0);
+            const photoUrls = data.photoUrls || (data.photoUrl ? [data.photoUrl] : (data.imageUrl ? [data.imageUrl] : []));
             return {
               id: d.id,
-              type: data.type || 'Community Report',
-              desc: data.desc || data.description || '',
+              type: data.issueType || data.type || 'Community Report',
+              issueType: data.issueType || data.type,
+              desc: data.desc || data.notes || data.description || '',
+              notes: data.notes || data.desc || '',
               lat: typeof lat === 'number' ? lat : 0,
               lng: typeof lng === 'number' ? lng : 0,
-              time: formatTime(data.timestamp || data.time),
-              status: (data.status || data.verificationStatus || 'OPEN') as 'OPEN' | 'VERIFIED' | 'RESOLVED',
-              photoUrls: data.photoUrls || (data.photoUrl ? [data.photoUrl] : []),
+              time: formatTime(data.timestamp || data.createdAt || data.time),
+              status: (data.status || data.verificationStatus || 'logged') as any,
+              verificationStatus: data.verificationStatus || data.status || 'OPEN',
+              photoUrls: photoUrls,
+              imageUrl: data.imageUrl || (photoUrls.length > 0 ? photoUrls[0] : undefined),
               city: data.city || data.cityId,
+              cityId: data.cityId || data.city,
+              road: data.road,
+              roadId: data.roadId,
+              lightsDown: data.lightsDown,
+              userId: data.userId || data.userPhone,
+              userPhone: data.userPhone || data.userId,
               timestamp: data.timestamp,
               adminNotes: data.adminNotes,
+              riskRelevance: data.riskRelevance,
             } as CommunityReport;
           })
-          .filter((r) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase());
+          .filter((r) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase() || (r.cityId && r.cityId.toLowerCase() === city.toLowerCase()));
       } else {
         getDocs(collection(db, 'reports'))
           .then((rSnap) => {
             reports = rSnap.docs
               .map((d) => {
                 const data = d.data();
-                const lat = data.lat || (Array.isArray(data.loc) ? data.loc[0] : 0);
-                const lng = data.lng || (Array.isArray(data.loc) ? data.loc[1] : 0);
+                const lat = data.lat || data.latitude || (Array.isArray(data.loc) ? data.loc[0] : 0);
+                const lng = data.lng || data.longitude || (Array.isArray(data.loc) ? data.loc[1] : 0);
+                const photoUrls = data.photoUrls || (data.photoUrl ? [data.photoUrl] : (data.imageUrl ? [data.imageUrl] : []));
                 return {
                   id: d.id,
-                  type: data.type || 'Community Report',
-                  desc: data.desc || data.description || '',
+                  type: data.issueType || data.type || 'Community Report',
+                  issueType: data.issueType || data.type,
+                  desc: data.desc || data.notes || data.description || '',
+                  notes: data.notes || data.desc || '',
                   lat: typeof lat === 'number' ? lat : 0,
                   lng: typeof lng === 'number' ? lng : 0,
-                  time: formatTime(data.timestamp || data.time),
-                  status: (data.status || 'OPEN') as 'OPEN' | 'VERIFIED' | 'RESOLVED',
-                  photoUrls: data.photoUrls || (data.photoUrl ? [data.photoUrl] : []),
+                  time: formatTime(data.timestamp || data.createdAt || data.time),
+                  status: (data.status || data.verificationStatus || 'logged') as any,
+                  verificationStatus: data.verificationStatus || data.status || 'OPEN',
+                  photoUrls: photoUrls,
+                  imageUrl: data.imageUrl || (photoUrls.length > 0 ? photoUrls[0] : undefined),
                   city: data.city || data.cityId,
+                  cityId: data.cityId || data.city,
+                  road: data.road,
+                  roadId: data.roadId,
+                  lightsDown: data.lightsDown,
+                  userId: data.userId || data.userPhone,
+                  userPhone: data.userPhone || data.userId,
                   timestamp: data.timestamp,
                   adminNotes: data.adminNotes,
+                  riskRelevance: data.riskRelevance,
                 } as CommunityReport;
               })
-              .filter((r) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase());
+              .filter((r) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase() || (r.cityId && r.cityId.toLowerCase() === city.toLowerCase()));
             emit();
           })
           .catch(() => {});

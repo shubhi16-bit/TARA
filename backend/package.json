@@ -3,7 +3,8 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "ts-node src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
     "dev": "nodemon src/server.ts",
     "seed": "ts-node seed/seedDelhi.ts"
   },
@@ -20,7 +21,8 @@
     "helmet": "^8.3.0",
     "joi": "^18.2.5",
     "jsonwebtoken": "^9.0.3",
-    "morgan": "^1.11.0"
+    "morgan": "^1.11.0",
+    "multer": "^2.2.0"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
@@ -28,6 +30,7 @@
     "@types/express": "^5.0.6",
     "@types/jsonwebtoken": "^9.0.10",
     "@types/morgan": "^1.9.10",
+    "@types/multer": "^2.2.0",
     "@types/node": "^26.2.0",
     "nodemon": "^3.1.14",
     "ts-node": "^10.9.2",

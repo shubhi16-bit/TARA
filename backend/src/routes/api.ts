@@ -1,9 +1,16 @@
 import { Router } from 'express';
+import multer from 'multer';
 import { db, storage, adminApp } from '../config/firebase';
 import { calculateRoadRisk, categorizeRiskLevel } from '../services/riskEngine';
 import { syncDelhiPoliceCrimeData, fetchDelhiPolicePressReleases } from '../services/delhiPoliceScraper';
 
 const router = Router();
+
+// Multer memory storage for photo uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+});
 
 function calculateRiskRelevance(type: string): number {
   const t = (type || '').toLowerCase();
@@ -22,25 +29,82 @@ function calculateRiskRelevance(type: string): number {
   return 30;
 }
 
+/**
+ * Helper to find nearest road and city based on coordinates
+ */
+async function findNearestRoad(lat: number, lng: number, fallbackCity: string = 'New Delhi') {
+  try {
+    if (!lat || !lng) return { nearestRoad: null, nearestCity: fallbackCity };
+
+    const roadsSnap = await db.collection('roads').get();
+    let roads = roadsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (roads.length === 0) {
+      const segSnap = await db.collection('road_segments').get();
+      roads = segSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    }
+
+    let closestRoad: any = null;
+    let minDistance = Infinity;
+
+    for (const road of roads) {
+      const coords = (road as any).coordinates || [];
+      if (Array.isArray(coords) && coords.length > 0) {
+        for (const pt of coords) {
+          let pLat = 0;
+          let pLng = 0;
+          if (Array.isArray(pt)) {
+            pLat = pt[0];
+            pLng = pt[1];
+          } else if (typeof pt === 'object' && pt !== null) {
+            pLat = pt.lat || pt.latitude || 0;
+            pLng = pt.lng || pt.longitude || 0;
+          }
+          if (pLat && pLng) {
+            const d = Math.hypot(lat - pLat, lng - pLng);
+            if (d < minDistance) {
+              minDistance = d;
+              closestRoad = road;
+            }
+          }
+        }
+      }
+    }
+
+    const nearestCity = closestRoad?.city || closestRoad?.cityId || fallbackCity;
+    return { nearestRoad: closestRoad, nearestCity };
+  } catch (err) {
+    console.warn('Error resolving nearest road:', err);
+    return { nearestRoad: null, nearestCity: fallbackCity };
+  }
+}
+
 // ----------------------------------------------------
-// 1. CITIZEN REPORTS API
+// 1. CITIZEN REPORTS API (INFRASTRUCTURE ONLY)
 // ----------------------------------------------------
 
 /**
  * POST /api/reports
- * Create a new citizen community report
+ * Create a new citizen infrastructure report with optional photo upload
  */
-router.post('/reports', async (req, res) => {
+router.post('/reports', upload.single('photo'), async (req, res) => {
   try {
     const {
       userId,
+      userPhone,
+      phone,
       type,
+      issueType,
       description,
       desc,
+      notes,
       latitude,
       longitude,
       lat,
       lng,
+      location,
+      locationAddress,
+      lightsDown,
+      lightsCount,
       cityId,
       city,
       photoUrls = [],
@@ -48,19 +112,49 @@ router.post('/reports', async (req, res) => {
       imageFilename,
     } = req.body;
 
-    const reportLat = typeof latitude === 'number' ? latitude : typeof lat === 'number' ? lat : 0;
-    const reportLng = typeof longitude === 'number' ? longitude : typeof lng === 'number' ? lng : 0;
-    const reportDesc = description || desc || '';
-    const reportType = type || 'Community Incident';
-    const reportCity = cityId || city || 'New Delhi';
-    const reportUserId = userId || 'citizen_user';
+    const reportLat = typeof latitude === 'string' ? parseFloat(latitude) : typeof latitude === 'number' ? latitude : typeof lat === 'number' ? lat : 28.6139;
+    const reportLng = typeof longitude === 'string' ? parseFloat(longitude) : typeof longitude === 'number' ? longitude : typeof lng === 'number' ? lng : 77.2090;
+    const reportNotes = notes || description || desc || 'Reported via TARA App';
+    const reportType = issueType || type || 'Broken Streetlight';
+    const reportUserId = userPhone || userId || phone || '+919876543210';
+    const reportLocation = locationAddress || location || `GPS (${reportLat.toFixed(4)}, ${reportLng.toFixed(4)})`;
+
+    let parsedLightsDown = 1;
+    if (lightsDown !== undefined) parsedLightsDown = parseInt(lightsDown, 10) || 1;
+    else if (lightsCount !== undefined) parsedLightsDown = parseInt(lightsCount, 10) || 1;
+    else if (reportType.toLowerCase().includes('multiple')) parsedLightsDown = 3;
+
+    // Resolve nearest road dynamically
+    const { nearestRoad, nearestCity } = await findNearestRoad(reportLat, reportLng, cityId || city || 'New Delhi');
 
     const reportRef = db.collection('communityReports').doc();
     const reportId = reportRef.id;
 
     const finalPhotoUrls: string[] = Array.isArray(photoUrls) ? [...photoUrls] : (photoUrls ? [photoUrls] : []);
 
-    // If Base64 image payload is supplied, upload to Firebase Storage
+    // 1. If multipart file is attached in request, upload to Firebase Storage
+    if (req.file) {
+      try {
+        const bucket = storage.bucket();
+        const safeOriginalName = (req.file.originalname || 'photo.jpg').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const filename = `photo_${Date.now()}_${safeOriginalName}`;
+        const storagePath = `communityReports/${reportId}/${filename}`;
+        const file = bucket.file(storagePath);
+
+        await file.save(req.file.buffer, {
+          metadata: { contentType: req.file.mimetype || 'image/jpeg' },
+          public: true,
+        });
+
+        const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
+        finalPhotoUrls.push(publicUrl);
+        console.log(`[STORAGE] Uploaded photo to Firebase Storage: ${publicUrl}`);
+      } catch (storageErr) {
+        console.warn('Firebase Storage upload warning (continuing with report creation):', storageErr);
+      }
+    }
+
+    // 2. If Base64 image payload is supplied, upload to Firebase Storage
     if (imageDataBase64) {
       try {
         const bucket = storage.bucket();
@@ -76,11 +170,10 @@ router.post('/reports', async (req, res) => {
           public: true,
         });
 
-        // Store public URL
         const publicUrl = `https://storage.googleapis.com/${bucket.name}/${storagePath}`;
         finalPhotoUrls.push(publicUrl);
       } catch (storageErr) {
-        console.warn('Firebase Storage upload warning (falling back to direct photoUrls):', storageErr);
+        console.warn('Firebase Storage Base64 upload warning:', storageErr);
       }
     }
 
@@ -89,41 +182,143 @@ router.post('/reports', async (req, res) => {
     const reportData = {
       id: reportId,
       userId: reportUserId,
+      userPhone: reportUserId,
       type: reportType,
-      desc: reportDesc,
+      issueType: reportType,
+      desc: reportNotes,
+      notes: reportNotes,
+      lightsDown: parsedLightsDown,
       loc: [reportLat, reportLng],
       latitude: reportLat,
       longitude: reportLng,
-      cityId: reportCity,
-      city: reportCity,
+      location: reportLocation,
+      locationAddress: reportLocation,
+      road: nearestRoad?.name || nearestRoad?.road_name || '',
+      roadId: nearestRoad?.id || '',
+      cityId: nearestCity,
+      city: nearestCity,
       timestamp: adminApp.firestore.FieldValue.serverTimestamp(),
       createdAt: new Date().toISOString(),
       photoUrls: finalPhotoUrls,
-      verificationStatus: 'OPEN' as const,
+      imageUrl: finalPhotoUrls[0] || null,
+      verificationStatus: 'OPEN',
       adminNotes: '',
-      status: 'OPEN' as const,
+      status: 'logged',
       riskRelevance,
     };
 
+    // Store ONLY in communityReports (NEVER touch crimeReports)
     await reportRef.set(reportData);
+
+    console.log(`[CITIZEN REPORT] Created communityReport ${reportId} for user ${reportUserId} near ${reportData.road || reportData.city}`);
 
     res.status(201).json({
       success: true,
-      id: reportId,
-      report: {
-        ...reportData,
-        timestamp: new Date().toISOString(),
-      },
+      ...reportData,
+      timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
-    console.error('Error creating report:', error);
+    console.error('Error creating citizen report:', error);
     res.status(500).json({ error: 'Failed to create report', details: error.message });
   }
 });
 
 /**
+ * GET /api/reports
+ * Fetch citizen reports from Firestore, supporting phone and city filtering
+ */
+router.get('/reports', async (req, res) => {
+  try {
+    const { phone, userPhone, userId, city } = req.query;
+    const filterPhone = (phone || userPhone || userId) as string | undefined;
+
+    let query: FirebaseFirestore.Query = db.collection('communityReports');
+
+    if (city && typeof city === 'string') {
+      query = query.where('city', '==', city);
+    }
+
+    const snapshot = await query.get();
+    let reports = snapshot.docs.map((doc) => {
+      const data = doc.data();
+      const lat = data.latitude || (Array.isArray(data.loc) ? data.loc[0] : 0);
+      const lng = data.longitude || (Array.isArray(data.loc) ? data.loc[1] : 0);
+      const photoUrls = data.photoUrls || (data.photoUrl ? [data.photoUrl] : []);
+      const imageUrl = data.imageUrl || (photoUrls.length > 0 ? photoUrls[0] : null);
+
+      return {
+        id: doc.id,
+        issueType: data.issueType || data.type || 'Broken Streetlight',
+        type: data.type || data.issueType || 'Community Report',
+        location: data.location || data.locationAddress || (data.road ? `Near ${data.road}` : 'Pinned Location'),
+        locationAddress: data.locationAddress || data.location || (data.road ? `Near ${data.road}` : 'Pinned Location'),
+        latitude: typeof lat === 'number' ? lat : 28.6139,
+        longitude: typeof lng === 'number' ? lng : 77.2090,
+        notes: data.notes || data.desc || '',
+        desc: data.desc || data.notes || '',
+        lightsDown: data.lightsDown || 1,
+        imageUrl: imageUrl,
+        photoUrls: photoUrls,
+        status: data.status || data.verificationStatus || 'logged',
+        verificationStatus: data.verificationStatus || data.status || 'OPEN',
+        createdAt: data.createdAt || (data.timestamp?.toDate ? data.timestamp.toDate().toISOString() : new Date().toISOString()),
+        userPhone: data.userPhone || data.userId || '',
+        userId: data.userId || data.userPhone || '',
+        road: data.road || '',
+        roadId: data.roadId || '',
+        city: data.city || data.cityId || 'New Delhi',
+      };
+    });
+
+    if (filterPhone) {
+      reports = reports.filter((r) => r.userPhone === filterPhone || r.userId === filterPhone);
+    }
+
+    res.json(reports);
+  } catch (error) {
+    console.error('Error fetching reports:', error);
+    res.status(500).json({ error: 'Failed to fetch reports' });
+  }
+});
+
+/**
+ * PATCH /api/reports/:id/status
+ * Update complaint lifecycle status (logged, inReview, inRepair, resolved, OPEN, VERIFIED, RESOLVED)
+ */
+router.patch('/reports/:id/status', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status, adminNotes } = req.body;
+
+    const updatePayload: Record<string, any> = {
+      status,
+      updatedAt: new Date(),
+    };
+
+    if (status === 'resolved' || status === 'RESOLVED') {
+      updatePayload.verificationStatus = 'RESOLVED';
+    } else if (status === 'inReview' || status === 'inRepair' || status === 'VERIFIED') {
+      updatePayload.verificationStatus = 'VERIFIED';
+    }
+
+    if (adminNotes !== undefined) {
+      updatePayload.adminNotes = adminNotes;
+    }
+
+    const reportRef = db.collection('communityReports').doc(id);
+    await reportRef.update(updatePayload);
+
+    console.log(`[REPORT STATUS] Updated report ${id} to ${status}`);
+    res.json({ success: true, id, status, updated: updatePayload });
+  } catch (error: any) {
+    console.error('Error updating report status:', error);
+    res.status(500).json({ error: 'Failed to update report status', details: error.message });
+  }
+});
+
+/**
  * PATCH /api/reports/:id
- * Authority status update: OPEN | VERIFIED | RESOLVED + adminNotes
+ * General status update endpoint for Authority Dashboard
  */
 router.patch('/reports/:id', async (req, res) => {
   try {
@@ -144,15 +339,7 @@ router.patch('/reports/:id', async (req, res) => {
     }
 
     const docRef = db.collection('communityReports').doc(id);
-    const docSnap = await docRef.get();
-
-    if (docSnap.exists) {
-      await docRef.update(updatePayload);
-    } else {
-      // Fallback check in 'reports' collection
-      const fallbackRef = db.collection('reports').doc(id);
-      await fallbackRef.update(updatePayload);
-    }
+    await docRef.update(updatePayload);
 
     res.json({
       success: true,
@@ -165,39 +352,8 @@ router.patch('/reports/:id', async (req, res) => {
   }
 });
 
-/**
- * GET /api/reports
- * Fetch reports, optionally filtered by city
- */
-router.get('/reports', async (req, res) => {
-  try {
-    const { city } = req.query;
-    let query: FirebaseFirestore.Query = db.collection('communityReports');
-
-    if (city && typeof city === 'string') {
-      query = query.where('city', '==', city);
-    }
-
-    const snapshot = await query.get();
-    let reports = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-
-    if (reports.length === 0) {
-      // Check fallback 'reports' collection
-      const fallbackSnap = await db.collection('reports').get();
-      reports = fallbackSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
-      if (city && typeof city === 'string') {
-        reports = reports.filter((r: any) => !r.city || r.city.toLowerCase() === city.toLowerCase());
-      }
-    }
-
-    res.json(reports);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch reports' });
-  }
-});
-
 // ----------------------------------------------------
-// 2. DELHI POLICE CRIME SYNC API
+// 2. DELHI POLICE CRIME SYNC API (SEPARATE FROM CITIZEN REPORTS)
 // ----------------------------------------------------
 
 /**
@@ -216,7 +372,6 @@ router.post('/crimes/sync-delhi-police', async (req, res) => {
 
 /**
  * GET /api/crimes/sync-delhi-police
- * Convenient GET trigger for manual sync / testing
  */
 router.get('/crimes/sync-delhi-police', async (req, res) => {
   try {
@@ -230,7 +385,6 @@ router.get('/crimes/sync-delhi-police', async (req, res) => {
 
 /**
  * GET /api/crimes/delhi-police
- * Inspect current Delhi Police press releases without saving
  */
 router.get('/crimes/delhi-police', async (req, res) => {
   try {
@@ -289,7 +443,7 @@ router.put('/streetlights/:id', async (req, res) => {
 });
 
 // ----------------------------------------------------
-// 3. ROADS & LIVE OVERVIEWS
+// 4. ROADS & LIVE OVERVIEWS
 // ----------------------------------------------------
 
 // Get all road segments
@@ -312,7 +466,6 @@ router.get('/map/overview', async (req, res) => {
   try {
     const city = (req.query.city as string) || 'New Delhi';
 
-    // Fetch roads, streetlights, crimes, reports in parallel
     const [roadsSnap, lightsSnap, crimesSnap, reportsSnap] = await Promise.all([
       db.collection('roads').get(),
       db.collection('streetlights').get(),
@@ -330,13 +483,11 @@ router.get('/map/overview', async (req, res) => {
     const crimes = crimesSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
     const reports = reportsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
 
-    // Filter by city
     const filteredRoads = rawRoads.filter((r: any) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase());
     const filteredLights = streetlights.filter((l: any) => !city || !l.city || l.city.toLowerCase() === city.toLowerCase());
     const filteredCrimes = crimes.filter((c: any) => !city || !c.city || c.city.toLowerCase() === city.toLowerCase());
     const filteredReports = reports.filter((r: any) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase());
 
-    // Compute deterministic risk for roads
     const enrichedRoads = filteredRoads.map((road: any) => {
       const matchingLights = filteredLights.filter(
         (l: any) => (l.road && l.road.toLowerCase() === (road.name || road.road_name || '').toLowerCase())
@@ -384,7 +535,91 @@ router.get('/map/overview', async (req, res) => {
   }
 });
 
-// Mock Safe Route API
+// ----------------------------------------------------
+// 5. MOBILE CITIZEN APP COMPATIBILITY API
+// ----------------------------------------------------
+
+// Auth: Send OTP
+router.post('/auth/send-otp', (req, res) => {
+  const { phone } = req.body;
+  console.log(`[AUTH] OTP requested for phone: ${phone}`);
+  res.json({ success: true, message: 'OTP sent to mobile number', otpDemo: '123456' });
+});
+
+// Auth: Verify OTP
+router.post('/auth/verify-otp', (req, res) => {
+  const { phone, otp } = req.body;
+  console.log(`[AUTH] Verifying OTP ${otp} for phone: ${phone}`);
+  res.json({
+    success: true,
+    token: `jwt_token_${Date.now()}`,
+    user: { phone, name: 'TARA Citizen' },
+  });
+});
+
+// Dark Zones: Get All Active Dark Corridors for Mobile App
+router.get('/dark-zones', async (req, res) => {
+  try {
+    const [roadsSnap, lightsSnap] = await Promise.all([
+      db.collection('roads').get(),
+      db.collection('streetlights').get(),
+    ]);
+
+    let rawRoads = roadsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    if (rawRoads.length === 0) {
+      const segSnap = await db.collection('road_segments').get();
+      rawRoads = segSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+    }
+
+    const lights = lightsSnap.docs.map((d) => ({ id: d.id, ...d.data() }));
+
+    const darkZones = rawRoads.map((road: any, idx: number) => {
+      const matchingLights = lights.filter(
+        (l: any) => l.road && l.road.toLowerCase() === (road.name || road.road_name || '').toLowerCase()
+      );
+      const faultyLights = matchingLights.filter((l: any) => l.status === 'faulty' || l.status === 'broken').length;
+      const totalLights = matchingLights.length > 0 ? matchingLights.length : (road.totalLights || 10);
+      const workingLights = Math.max(0, totalLights - faultyLights);
+
+      let lat = 28.6139 + idx * 0.002;
+      let lng = 77.2090 + idx * 0.002;
+      if (Array.isArray(road.coordinates) && road.coordinates.length > 0) {
+        const pt = road.coordinates[0];
+        if (Array.isArray(pt)) {
+          lat = pt[0];
+          lng = pt[1];
+        } else if (typeof pt === 'object') {
+          lat = pt.lat || pt.latitude || lat;
+          lng = pt.lng || pt.longitude || lng;
+        }
+      }
+
+      const score = typeof road.score === 'number' ? road.score : 65;
+      const level = score >= 80 ? 'critical' : score >= 60 ? 'high' : score >= 30 ? 'medium' : 'low';
+
+      return {
+        id: `DZ-${road.id}`,
+        roadName: road.name || road.road_name || `Road ${road.id}`,
+        latitude: lat,
+        longitude: lng,
+        riskLevel: level,
+        riskScore: score,
+        totalLights,
+        workingLights,
+        faultyLights,
+        estimatedFootfall: (road.nightExposure || 50) > 60 ? 'High' : (road.nightExposure || 50) > 30 ? 'Moderate' : 'Low',
+        activeReports: road.reports || 0,
+      };
+    });
+
+    res.json(darkZones);
+  } catch (error) {
+    console.error('Error generating dark zones:', error);
+    res.status(500).json({ error: 'Failed to fetch dark zones' });
+  }
+});
+
+// Safe Route API
 router.get('/routes/safe-route', (req, res) => {
   const { start_lat, start_lng, dest_lat, dest_lng } = req.query;
 
@@ -392,30 +627,38 @@ router.get('/routes/safe-route', (req, res) => {
     return res.status(400).json({ error: 'Missing coordinates' });
   }
 
+  const sLat = parseFloat(start_lat as string) || 28.6139;
+  const sLng = parseFloat(start_lng as string) || 77.2090;
+  const dLat = parseFloat(dest_lat as string) || 28.6250;
+  const dLng = parseFloat(dest_lng as string) || 77.2180;
+
   const routeA = {
-    id: 'route_a',
+    id: 'route_standard',
+    name: 'Direct Route (High Dark Zones)',
     distance_km: 1.8,
     duration_min: 14,
-    risk_score: 82,
+    risk_score: 78,
     risk_level: 'HIGH',
     geometry: [
-      [28.6139, 77.2090],
-      [28.6145, 77.2095],
-      [28.6150, 77.2100],
+      [sLat, sLng],
+      [(sLat + dLat) / 2, (sLng + dLng) / 2],
+      [dLat, dLng],
     ],
     recommended: false,
   };
 
   const routeB = {
-    id: 'route_b',
+    id: 'route_safe',
+    name: 'TARA Well-Lit Safest Route',
     distance_km: 2.1,
     duration_min: 17,
-    risk_score: 31,
+    risk_score: 28,
     risk_level: 'LOW',
     geometry: [
-      [28.6139, 77.2090],
-      [28.6140, 77.2075],
-      [28.6150, 77.2100],
+      [sLat, sLng],
+      [sLat + 0.003, sLng + 0.001],
+      [(sLat + dLat) / 2 + 0.002, (sLng + dLng) / 2 - 0.001],
+      [dLat, dLng],
     ],
     recommended: true,
   };
