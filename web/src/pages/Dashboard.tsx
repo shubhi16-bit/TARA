@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   MapContainer,
@@ -10,7 +11,7 @@ import {
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useTaraData } from '../hooks/useTaraData';
-import type { Road } from '../services/taraDataService';
+import type { Road, CommunityReport } from '../services/taraDataService';
 
 const cityCoordinates: Record<string, [number, number]> = {
   'New Delhi': [28.6315, 77.2190],
@@ -70,6 +71,14 @@ function Icon({
         </svg>
       );
 
+    case 'camera':
+      return (
+        <svg {...common}>
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+          <circle cx="12" cy="13" r="4" />
+        </svg>
+      );
+
     case 'crime':
       return (
         <svg {...common}>
@@ -118,17 +127,41 @@ function Icon({
   }
 }
 
-function getSeverityStyle(severity: string) {
-  switch (severity) {
-    case 'CRITICAL':
-      return 'text-risk-crit bg-risk-crit/10 border-risk-crit/20';
-    case 'HIGH':
-      return 'text-risk-high bg-risk-high/10 border-risk-high/20';
-    case 'MODERATE':
-      return 'text-risk-mod bg-risk-mod/10 border-risk-mod/20';
-    default:
-      return 'text-risk-low bg-risk-low/10 border-risk-low/20';
+function getRelativeTime(timestamp: any): string {
+  if (!timestamp) return 'Just now';
+  let date: Date;
+  if (timestamp.toDate && typeof timestamp.toDate === 'function') {
+    date = timestamp.toDate();
+  } else if (timestamp instanceof Date) {
+    date = timestamp;
+  } else if (typeof timestamp === 'string' || typeof timestamp === 'number') {
+    date = new Date(timestamp);
+  } else {
+    return 'Just now';
   }
+
+  const diffMs = Date.now() - date.getTime();
+  if (isNaN(diffMs) || diffMs < 30000) return 'Just now';
+
+  const diffSec = Math.floor(diffMs / 1000);
+  if (diffSec < 60) return `${diffSec}s ago`;
+  const diffMin = Math.floor(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} min${diffMin > 1 ? 's' : ''} ago`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
+}
+
+function getReportStatusStyle(status: string) {
+  const s = (status || '').toLowerCase();
+  if (s === 'resolved') {
+    return 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20';
+  }
+  if (s === 'inrepair' || s === 'in_repair' || s === 'inreview' || s === 'in review' || s === 'verified') {
+    return 'bg-blue-500/10 text-blue-400 border-blue-500/20';
+  }
+  return 'bg-amber-500/10 text-amber-400 border-amber-500/20';
 }
 
 function getPriorityColor(score: number) {
@@ -198,123 +231,115 @@ function KpiCard({
 function DashboardMap({ roads, city }: { roads: Road[]; city: string }) {
   const centerPos = cityCoordinates[city] || [28.6315, 77.2190];
 
-  const createGlowIcon = (color: string) =>
-    L.divIcon({
-      className: '',
-      html: `
-        <div
-          style="
-            width: 16px;
-            height: 16px;
-            border-radius: 9999px;
-            background: ${color};
-            box-shadow: 0 0 8px ${color}, 0 0 16px ${color};
-            border: 2px solid rgba(255,255,255,0.7);
-          "
-        ></div>
-      `,
-      iconSize: [16, 16],
-      iconAnchor: [8, 8],
-    });
-
-  const spots = roads
-    .filter((r) => r.coordinates && r.coordinates.length > 0)
-    .map((r) => ({
+  const mapSpots = roads.map((r, idx) => {
+    let pos: [number, number] = [28.6139 + idx * 0.003, 77.2090 + idx * 0.003];
+    if (r.coordinates && r.coordinates.length > 0) {
+      const p = r.coordinates[0];
+      if (Array.isArray(p)) {
+        pos = [p[0], p[1]];
+      } else if (typeof p === 'object' && p !== null) {
+        pos = [(p as any).lat || (p as any).latitude || pos[0], (p as any).lng || (p as any).longitude || pos[1]];
+      }
+    }
+    return {
       id: r.id,
       name: r.name,
-      position: r.coordinates[0] as [number, number],
+      pos,
       score: r.score,
-      level: r.riskLevel,
+      riskLevel: r.riskLevel,
       color: getRiskHex(r.score),
-      reasons: `${r.faultyLights} faulty lights • ${r.crimeNearby} crimes`,
-    }));
+      faultyLights: r.faultyLights || 0,
+      totalLights: r.totalLights || 10,
+      reports: r.reports || 0,
+    };
+  });
 
   return (
-    <section className="relative h-[360px] overflow-hidden rounded-xl border border-brand-border bg-brand-surface xl:col-span-3">
-      <MapContainer
-        key={city}
-        center={spots.length > 0 ? spots[0].position : centerPos}
-        zoom={13}
-        zoomControl={false}
-        attributionControl={false}
-        style={{
-          height: '100%',
-          width: '100%',
-          background: 'var(--brand-dark)',
-        }}
-      >
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
-        />
-        <ZoomControl position="topright" />
-
-        {spots.map((spot) => (
-          <Circle
-            key={`area-${spot.id}`}
-            center={spot.position}
-            radius={700}
-            pathOptions={{
-              color: spot.color,
-              fillColor: spot.color,
-              fillOpacity: spot.score >= 80 ? 0.18 : 0.09,
-              weight: 1,
-            }}
-          />
-        ))}
-
-        {spots.map((spot) => (
-          <Marker
-            key={spot.id}
-            position={spot.position}
-            icon={createGlowIcon(spot.color)}
-          >
-            <Popup>
-              <div className="min-w-[170px] font-sans text-gray-900">
-                <p className="text-sm font-semibold">{spot.name}</p>
-                <div className="mt-1 flex items-end gap-2">
-                  <span className="text-xl font-bold" style={{ color: spot.color }}>
-                    {spot.score}
-                  </span>
-                  <span className="mb-0.5 text-xs text-gray-500">/ 100</span>
-                </div>
-                <p className="mt-1 text-xs font-semibold" style={{ color: spot.color }}>
-                  {spot.level} Risk
-                </p>
-                <p className="mt-1 text-xs text-gray-500">{spot.reasons}</p>
-              </div>
-            </Popup>
-          </Marker>
-        ))}
-      </MapContainer>
-
-      <div className="pointer-events-none absolute left-4 top-4 z-[500] rounded-md bg-brand-surface/90 px-3 py-1.5 backdrop-blur border border-brand-border shadow-sm">
-        <h3 className="text-xs font-semibold text-brand-text">Risk Heatmap</h3>
-        <p className="text-[10px] text-brand-muted">City-wide safety risk visualization</p>
-      </div>
-
-      <div className="absolute bottom-4 left-4 z-[500] rounded-xl border border-brand-border bg-brand-surface/95 p-3 shadow-xl backdrop-blur">
-        <p className="mb-2 text-[10px] font-semibold text-brand-text">Risk Level</p>
-        <div className="space-y-1.5">
-          {[
-            ['Critical', '#ef4444'],
-            ['High', '#f97316'],
-            ['Moderate', '#eab308'],
-            ['Low', '#22c55e'],
-          ].map(([label, color]) => (
-            <div key={label} className="flex items-center gap-2">
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: color, boxShadow: `0 0 6px ${color}` }}
-              />
-              <span className="text-[10px] text-brand-muted">{label}</span>
-            </div>
-          ))}
+    <section className="overflow-hidden rounded-xl border border-brand-border bg-brand-surface xl:col-span-3 flex flex-col">
+      <div className="flex items-center justify-between border-b border-brand-border px-5 py-4">
+        <div>
+          <h3 className="text-sm font-semibold text-brand-text">
+            Active Safety Radar
+          </h3>
+          <p className="mt-0.5 text-[11px] text-brand-muted">
+            Live road risk coordinates across {city || 'monitored sector'}
+          </p>
         </div>
+
+        <span className="rounded-md border border-brand-border bg-brand-dark px-2.5 py-1 text-[10px] text-brand-muted">
+          {roads.length} Monitored Roads
+        </span>
       </div>
 
-      <div className="absolute right-14 top-4 z-[500] flex items-center gap-1.5 rounded-full border border-green-500/20 bg-brand-surface/90 px-2.5 py-1 backdrop-blur">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
-        <span className="text-[9px] font-semibold text-green-500">LIVE SYNC</span>
+      <div className="relative h-[290px] w-full bg-brand-dark">
+        <MapContainer
+          center={centerPos}
+          zoom={13}
+          zoomControl={false}
+          className="h-full w-full"
+        >
+          <ZoomControl position="bottomright" />
+          <TileLayer
+            attribution='&copy; <a href="https://carto.com/">CARTO</a>'
+            url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          />
+
+          {mapSpots.map((spot) => (
+            <Circle
+              key={`circle-${spot.id}`}
+              center={spot.pos}
+              radius={240}
+              pathOptions={{
+                color: spot.color,
+                fillColor: spot.color,
+                fillOpacity: spot.score >= 80 ? 0.25 : 0.12,
+                weight: 1.5,
+              }}
+            />
+          ))}
+
+          {mapSpots.map((spot) => (
+            <Marker
+              key={`marker-${spot.id}`}
+              position={spot.pos}
+              icon={L.divIcon({
+                className: 'custom-dashboard-marker',
+                html: `
+                  <div style="
+                    background: ${spot.color};
+                    color: white;
+                    font-size: 10px;
+                    font-weight: 700;
+                    width: 22px;
+                    height: 22px;
+                    border-radius: 50%;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border: 2px solid white;
+                    box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                  ">
+                    ${spot.score}
+                  </div>
+                `,
+                iconSize: [22, 22],
+                iconAnchor: [11, 11],
+              })}
+            >
+              <Popup>
+                <div className="text-xs">
+                  <p className="font-bold">{spot.name}</p>
+                  <p className="mt-0.5 font-semibold" style={{ color: spot.color }}>
+                    {spot.riskLevel} Risk ({spot.score}/100)
+                  </p>
+                  <p className="text-[11px] text-gray-500 mt-1">
+                    {spot.faultyLights}/{spot.totalLights} lights down • {spot.reports} reports
+                  </p>
+                </div>
+              </Popup>
+            </Marker>
+          ))}
+        </MapContainer>
       </div>
     </section>
   );
@@ -322,61 +347,48 @@ function DashboardMap({ roads, city }: { roads: Road[]; city: string }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const {
-    roads,
-    crimes,
-    streetlights,
-    reports,
-    loading,
-    city,
-    profileError,
-  } = useTaraData();
+  const { roads, crimes, streetlights, reports, loading, city, profileError } = useTaraData();
 
-  // Compute live KPIs
+  // Aggregate Metrics
   const totalLights = streetlights.length > 0
     ? streetlights.length
-    : roads.reduce((sum, r) => sum + (r.totalLights || 0), 0);
+    : roads.reduce((sum, r) => sum + (r.totalLights || 10), 0);
 
   const faultyLights = streetlights.filter((l) => l.status === 'faulty' || l.status === 'broken').length > 0
     ? streetlights.filter((l) => l.status === 'faulty' || l.status === 'broken').length
     : roads.reduce((sum, r) => sum + (r.faultyLights || 0), 0);
 
   const criticalZones = roads.filter((r) => r.score >= 80).length;
-  const pendingReports = reports.filter((r) => r.status === 'OPEN').length;
+  const pendingReports = reports.filter((r) => r.status === 'OPEN' || r.status === 'logged').length;
   const activeCrimes = crimes.length;
 
-  // Sorted priorities
+  // 1. Action Priority: Sorted strictly by calculated risk score DESC
   const topPriority = [...roads].sort((a, b) => b.score - a.score).slice(0, 4);
 
-  // Combined live activity feed
-  const recentActivity = [
-    ...crimes.map((c) => ({
-      id: `c-${c.id}`,
-      type: 'crime',
-      label: `${c.type} reported`,
-      location: c.desc || (c.lat != null && c.lng != null ? `${c.lat.toFixed(3)}, ${c.lng.toFixed(3)}` : (c.district || city)),
-      time: c.time,
-      severity: c.severity,
-    })),
-    ...reports.map((r) => ({
-      id: `r-${r.id}`,
-      type: 'report',
-      label: r.type,
-      location: r.desc || city,
-      time: r.time,
-      severity: r.status === 'OPEN' ? 'MODERATE' : 'LOW',
-    })),
-    ...streetlights
-      .filter((s) => s.status === 'repaired' || s.status === 'repair_dispatched')
-      .map((s) => ({
-        id: `s-${s.id}`,
-        type: 'repair',
-        label: s.status === 'repaired' ? 'Streetlight repaired' : 'Repair dispatched',
-        location: s.road || city,
-        time: 'Recent',
-        severity: 'LOW',
-      })),
-  ].slice(0, 6);
+  // 2. Recent Citizen Reports: Sorted strictly by createdAt DESC (newest first)
+  const sortedRecentReports = [...reports].sort((a, b) => {
+    const getTime = (val: any) => {
+      if (!val) return 0;
+      if (typeof val.toDate === 'function') return val.toDate().getTime();
+      if (val instanceof Date) return val.getTime();
+      const t = new Date(val).getTime();
+      return isNaN(t) ? 0 : t;
+    };
+    const timeA = getTime(a.createdAt) || getTime(a.timestamp);
+    const timeB = getTime(b.createdAt) || getTime(b.timestamp);
+    return timeB - timeA;
+  });
+
+  const recentCitizenReports = sortedRecentReports.slice(0, 5);
+
+  // Development Debug Verification Logging
+  useEffect(() => {
+    if (reports.length > 0) {
+      console.log('[TARA] Recent reports: [newest -> oldest]', sortedRecentReports.map((r) => r.id));
+      const newest = sortedRecentReports[0];
+      console.log('[TARA] Newest report ID:', newest?.id, 'createdAt:', newest?.createdAt || newest?.timestamp);
+    }
+  }, [reports]);
 
   const avgSafetyScore = roads.length > 0
     ? Math.round(100 - roads.reduce((sum, r) => sum + r.score, 0) / roads.length)
@@ -460,7 +472,7 @@ export default function Dashboard() {
 
       {/* MAIN CONTENT */}
       <div className="grid grid-cols-1 gap-5 xl:grid-cols-5">
-        {/* PRIORITIES */}
+        {/* TOP REPAIR PRIORITIES (SORTED BY RISK SCORE DESC) */}
         <section className="xl:col-span-3 overflow-hidden rounded-xl border border-brand-border bg-brand-surface">
           <div className="flex items-center justify-between border-b border-brand-border px-5 py-4">
             <div>
@@ -468,7 +480,7 @@ export default function Dashboard() {
                 Top Repair Priorities
               </h3>
               <p className="mt-0.5 text-[11px] text-brand-muted">
-                Areas ranked by risk score and safety impact
+                Roads ranked by calculated risk score descending
               </p>
             </div>
 
@@ -511,7 +523,7 @@ export default function Dashboard() {
                       </span>
                       {item.nightExposure < 40 && (
                         <span className="rounded-md bg-brand-dark px-2 py-0.5 text-[9px] text-brand-muted border border-brand-border">
-                          Low night lighting
+                          Low night footfall
                         </span>
                       )}
                     </div>
@@ -535,61 +547,120 @@ export default function Dashboard() {
           </div>
         </section>
 
-        {/* ACTIVITY FEED */}
-        <section className="xl:col-span-2 overflow-hidden rounded-xl border border-brand-border bg-brand-surface">
+        {/* RECENT CITIZEN REPORTS (SORTED BY CREATEDAT DESC) */}
+        <section className="xl:col-span-2 overflow-hidden rounded-xl border border-brand-border bg-brand-surface flex flex-col">
           <div className="flex items-center justify-between border-b border-brand-border px-5 py-4">
             <div>
-              <h3 className="text-sm font-semibold text-brand-text">
-                Live Activity Feed
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-semibold text-brand-text">
+                  Recent Citizen Reports
+                </h3>
+                <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[10px] font-bold text-primary">
+                  Live
+                </span>
+              </div>
               <p className="mt-0.5 text-[11px] text-brand-muted">
-                Real-time updates from Firestore
+                Newest community reports sorted by submission time
               </p>
             </div>
+
+            <button
+              onClick={() => navigate('/map')}
+              className="rounded-lg border border-brand-border px-2.5 py-1 text-xs font-medium text-brand-muted hover:text-brand-text hover:bg-brand-border/20 transition"
+            >
+              Map View
+            </button>
           </div>
 
-          <div className="max-h-[365px] divide-y divide-brand-border overflow-y-auto">
-            {recentActivity.length > 0 ? (
-              recentActivity.map((item) => (
-                <div
-                  key={item.id}
-                  className="flex items-start gap-3 px-5 py-3.5 transition hover:bg-brand-border/20"
-                >
+          <div className="divide-y divide-brand-border overflow-y-auto max-h-[380px] flex-1">
+            {loading ? (
+              <div className="p-8 text-center text-sm text-brand-muted">
+                Loading recent reports...
+              </div>
+            ) : recentCitizenReports.length > 0 ? (
+              recentCitizenReports.map((report: CommunityReport) => {
+                const hasPhoto = (report.photoUrls && report.photoUrls.length > 0) || Boolean(report.imageUrl);
+                const displayPhoto = report.imageUrl || (report.photoUrls && report.photoUrls[0]);
+                const locLabel = report.road
+                  ? `${report.road}${report.location && !report.location.includes(report.road) ? ` (${report.location})` : ''}`
+                  : (report.location || report.city || 'Pinned Location');
+
+                return (
                   <div
-                    className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border ${getSeverityStyle(
-                      item.severity
-                    )}`}
+                    key={report.id}
+                    className="flex items-start gap-3.5 px-5 py-3.5 transition hover:bg-brand-border/20"
                   >
-                    <Icon type={item.type} size={17} />
-                  </div>
+                    {/* Left Icon or Thumbnail */}
+                    {hasPhoto && displayPhoto ? (
+                      <div className="relative mt-0.5 h-10 w-10 shrink-0 overflow-hidden rounded-lg border border-brand-border bg-brand-dark">
+                        <img
+                          src={displayPhoto}
+                          alt="Report attachment"
+                          className="h-full w-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLImageElement).style.display = 'none';
+                          }}
+                        />
+                        <span className="absolute bottom-0 right-0 rounded-tl bg-black/70 p-0.5 text-white">
+                          <Icon type="camera" size={10} />
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-primary/20 bg-primary/10 text-primary">
+                        <Icon type="report" size={18} />
+                      </div>
+                    )}
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <span
-                        className={`rounded border px-1.5 py-0.5 text-[8px] font-bold tracking-wide ${getSeverityStyle(
-                          item.severity
-                        )}`}
-                      >
-                        {item.severity}
-                      </span>
-                      <span className="text-[10px] text-brand-muted">
-                        {item.time}
-                      </span>
+                    {/* Report Details */}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="truncate text-xs font-semibold text-brand-text">
+                          {report.issueType || report.type || 'Infrastructure Report'}
+                        </p>
+                        <span className="shrink-0 text-[10px] font-medium text-brand-muted">
+                          {getRelativeTime(report.createdAt || report.timestamp)}
+                        </span>
+                      </div>
+
+                      <p className="mt-0.5 truncate text-[11px] text-brand-muted">
+                        📍 {locLabel}
+                      </p>
+
+                      {(report.notes || report.desc) && (
+                        <p className="mt-1 line-clamp-1 text-[11px] text-brand-text/80 italic">
+                          "{report.notes || report.desc}"
+                        </p>
+                      )}
+
+                      <div className="mt-2 flex items-center gap-1.5 flex-wrap">
+                        {/* Status badge */}
+                        <span
+                          className={`rounded border px-1.5 py-0.5 text-[9px] font-semibold tracking-wide uppercase ${getReportStatusStyle(
+                            report.status
+                          )}`}
+                        >
+                          {report.status || 'LOGGED'}
+                        </span>
+
+                        {/* Lights down count */}
+                        <span className="rounded bg-brand-dark border border-brand-border px-1.5 py-0.5 text-[9px] text-risk-mod font-mono">
+                          {report.lightsDown || 1} light{(report.lightsDown || 1) > 1 ? 's' : ''} down
+                        </span>
+
+                        {/* Photo indicator badge if available */}
+                        {hasPhoto && (
+                          <span className="rounded bg-brand-dark border border-brand-border px-1.5 py-0.5 text-[9px] text-brand-muted flex items-center gap-1">
+                            <Icon type="camera" size={10} /> Photo attached
+                          </span>
+                        )}
+                      </div>
                     </div>
-
-                    <p className="mt-1 text-xs font-semibold text-brand-text">
-                      {item.label}
-                    </p>
-
-                    <p className="mt-0.5 text-[11px] text-brand-muted">
-                      {item.location}
-                    </p>
                   </div>
-                </div>
-              ))
+                );
+              })
             ) : (
               <div className="p-8 text-center text-sm text-brand-muted">
-                {loading ? 'Loading activity...' : 'No incident activity recorded yet.'}
+                No citizen reports yet
               </div>
             )}
           </div>

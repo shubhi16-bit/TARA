@@ -82,10 +82,13 @@ export interface CommunityReport {
   cityId?: string;
   road?: string;
   roadId?: string;
+  location?: string;
+  locationAddress?: string;
   lightsDown?: number;
   userId?: string;
   userPhone?: string;
   timestamp?: any;
+  createdAt?: any;
   adminNotes?: string;
   riskRelevance?: number;
 }
@@ -501,7 +504,7 @@ export function subscribeToCityData(
               notes: data.notes || data.desc || '',
               lat: typeof lat === 'number' ? lat : 0,
               lng: typeof lng === 'number' ? lng : 0,
-              time: formatTime(data.timestamp || data.createdAt || data.time),
+              time: formatTime(data.createdAt || data.timestamp || data.time),
               status: (data.status || data.verificationStatus || 'logged') as any,
               verificationStatus: data.verificationStatus || data.status || 'OPEN',
               photoUrls: photoUrls,
@@ -510,15 +513,20 @@ export function subscribeToCityData(
               cityId: data.cityId || data.city,
               road: data.road,
               roadId: data.roadId,
+              location: data.location || data.locationAddress,
+              locationAddress: data.locationAddress || data.location,
               lightsDown: data.lightsDown,
               userId: data.userId || data.userPhone,
               userPhone: data.userPhone || data.userId,
               timestamp: data.timestamp,
+              createdAt: data.createdAt || data.timestamp,
               adminNotes: data.adminNotes,
               riskRelevance: data.riskRelevance,
             } as CommunityReport;
           })
           .filter((r) => !city || !r.city || r.city.toLowerCase() === city.toLowerCase() || (r.cityId && r.cityId.toLowerCase() === city.toLowerCase()));
+
+        console.log('[TARA] Community reports received:', reports.length);
       } else {
         getDocs(collection(db, 'reports'))
           .then((rSnap) => {

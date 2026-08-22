@@ -198,7 +198,7 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
       cityId: nearestCity,
       city: nearestCity,
       timestamp: adminApp.firestore.FieldValue.serverTimestamp(),
-      createdAt: new Date().toISOString(),
+      createdAt: adminApp.firestore.FieldValue.serverTimestamp(),
       photoUrls: finalPhotoUrls,
       imageUrl: finalPhotoUrls[0] || null,
       verificationStatus: 'OPEN',
@@ -215,6 +215,7 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
     res.status(201).json({
       success: true,
       ...reportData,
+      createdAt: new Date().toISOString(),
       timestamp: new Date().toISOString(),
     });
   } catch (error: any) {
