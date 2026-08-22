@@ -2,6 +2,7 @@ import { Router } from 'express';
 import multer from 'multer';
 import { db, storage, adminApp } from '../config/firebase';
 import { calculateRoadRisk, categorizeRiskLevel } from '../services/riskEngine';
+import { calculateRoadNightExposure } from '../services/poiFootfallEngine';
 import { syncDelhiPoliceCrimeData, fetchDelhiPolicePressReleases } from '../services/delhiPoliceScraper';
 
 const router = Router();
@@ -514,12 +515,16 @@ router.get('/map/overview', async (req, res) => {
         (r: any) => r.desc && r.desc.toLowerCase().includes((road.name || road.road_name || '').toLowerCase())
       );
 
+      const roadCoords = road.coordinates || (road.latitude && road.longitude ? [[road.latitude, road.longitude]] : []);
+      const exposureFactors = calculateRoadNightExposure(roadCoords);
+      const footfallRating = exposureFactors.totalNightExposure;
+
       const risk = calculateRoadRisk({
         faultyLights: faultyL,
         totalLights,
         crimeCount: road.crimeNearby || 0,
         reportsCount: matchingReports.length,
-        footfallRating: road.nightExposure || 45,
+        footfallRating,
       });
 
       const score = road.score > 0 && risk.score === 0 ? road.score : risk.score;
@@ -533,8 +538,9 @@ router.get('/map/overview', async (req, res) => {
         totalLights,
         crimeNearby: road.crimeNearby || 0,
         reports: matchingReports.length,
-        nightExposure: road.nightExposure || 45,
-        coordinates: road.coordinates || (road.latitude && road.longitude ? [[road.latitude, road.longitude]] : []),
+        nightExposure: footfallRating,
+        exposureFactors,
+        coordinates: roadCoords,
       };
     });
 

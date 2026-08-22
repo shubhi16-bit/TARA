@@ -12,8 +12,11 @@ import {
   parseIncidentAgeHours,
 } from './riskEngine';
 import type { RiskLevel, RiskFactorsBreakdown } from './riskEngine';
+import { calculateRoadNightExposure } from './poiFootfallEngine';
+import type { ExposureFactors } from './poiFootfallEngine';
 
 export type { RiskLevel };
+export type { ExposureFactors };
 
 export interface Road {
   id: string;
@@ -26,6 +29,7 @@ export interface Road {
   crimeNearby: number;
   reports: number;
   nightExposure: number;
+  exposureFactors?: ExposureFactors;
   coordinates: [number, number][];
   city?: string;
   cityId?: string;
@@ -228,8 +232,18 @@ function enrichRoadsWithRiskEngine(
 
     // 3. Active Community Reports (OPEN, VERIFIED, logged, inReview, inRepair; RESOLVED reports do not contribute to risk)
     const matchingReports = reportsList.filter((r) => {
-      const isResolved = (r.status || '').toLowerCase() === 'resolved';
+      const normalizedStatus = (r.status || r.verificationStatus || '').toLowerCase().trim();
+      const isResolved = normalizedStatus === 'resolved';
       if (isResolved) return false;
+
+      const isActive =
+        normalizedStatus === 'logged' ||
+        normalizedStatus === 'inreview' ||
+        normalizedStatus === 'inrepair' ||
+        normalizedStatus === 'open' ||
+        normalizedStatus === 'verified' ||
+        normalizedStatus === '';
+      if (!isActive) return false;
 
       // 1. Direct match by roadId
       if (r.roadId && r.roadId === road.id) return true;
@@ -253,7 +267,7 @@ function enrichRoadsWithRiskEngine(
         for (const pt of road.coordinates) {
           const pLat = Array.isArray(pt) ? pt[0] : ((pt as any)?.lat || (pt as any)?.latitude);
           const pLng = Array.isArray(pt) ? pt[1] : ((pt as any)?.lng || (pt as any)?.longitude);
-          if (pLat && pLng) {
+          if (typeof pLat === 'number' && typeof pLng === 'number') {
             const dist = Math.hypot(r.lat - pLat, r.lng - pLng);
             if (dist < 0.004) {
               return true;
@@ -266,9 +280,13 @@ function enrichRoadsWithRiskEngine(
     });
     const activeReportsCount = matchingReports.length;
 
-    // 4. Calculate dynamic deterministic risk using TARA risk engine
-    const footfallRating = road.nightExposure !== undefined ? road.nightExposure : 50;
+    // 4. Dynamic POI-Based Night Pedestrian Exposure (0 - 100)
+    // Real physical POIs (transit, markets, healthcare, dining, colleges, parks, bus stops)
+    // Crime data is strictly excluded from footfall estimation.
+    const exposureFactors = calculateRoadNightExposure(road.coordinates || []);
+    const footfallRating = exposureFactors.totalNightExposure;
 
+    // 5. Calculate dynamic deterministic risk using TARA risk engine
     const riskResult = calculateRoadRisk({
       faultyLights: faultyL,
       totalLights: totalL,
@@ -290,6 +308,7 @@ function enrichRoadsWithRiskEngine(
       crimeNearby: crimeCount,
       reports: activeReportsCount,
       nightExposure: footfallRating,
+      exposureFactors,
     };
   });
 }
