@@ -52,14 +52,14 @@ export const POI_WEIGHTS: Record<
   POICategory,
   { baseWeight: number; nightRetention: number; label: string }
 > = {
-  TRANSIT_HUB: { baseWeight: 30, nightRetention: 0.90, label: 'Transit Hub / Metro' },
-  MARKET: { baseWeight: 25, nightRetention: 0.80, label: 'Market / Commercial' },
-  HOSPITAL: { baseWeight: 25, nightRetention: 0.85, label: 'Hospital / 24x7 Healthcare' },
-  MALL_DINING: { baseWeight: 20, nightRetention: 0.75, label: 'Mall & Night Dining' },
-  COLLEGE: { baseWeight: 20, nightRetention: 0.60, label: 'College / Hostel' },
-  BUS_STOP: { baseWeight: 15, nightRetention: 0.70, label: 'Bus Terminal / Transit Stop' },
-  PARK: { baseWeight: 15, nightRetention: 0.40, label: 'Public Park / Cultural Centre' },
-  GOVT_OFFICE: { baseWeight: 10, nightRetention: 0.15, label: 'Govt / Administrative Office' },
+  TRANSIT_HUB: { baseWeight: 18, nightRetention: 0.90, label: 'Transit Hub / Metro' },
+  MARKET: { baseWeight: 14, nightRetention: 0.80, label: 'Market / Commercial' },
+  HOSPITAL: { baseWeight: 14, nightRetention: 0.85, label: 'Hospital / 24x7 Healthcare' },
+  MALL_DINING: { baseWeight: 10, nightRetention: 0.75, label: 'Mall & Night Dining' },
+  COLLEGE: { baseWeight: 8, nightRetention: 0.60, label: 'College / Hostel' },
+  BUS_STOP: { baseWeight: 8, nightRetention: 0.70, label: 'Bus Terminal / Transit Stop' },
+  PARK: { baseWeight: 6, nightRetention: 0.40, label: 'Public Park / Cultural Centre' },
+  GOVT_OFFICE: { baseWeight: 4, nightRetention: 0.15, label: 'Govt / Administrative Office' },
 };
 
 /**
@@ -194,21 +194,20 @@ export function calculateRoadNightExposure(
 ): ExposureFactors {
   const pois = options?.pois || DELHI_POIS;
   const hour = options?.hour !== undefined ? options.hour : 21.0; // Default evening 9 PM
-  const baseline = options?.baselineConnectivity !== undefined ? options.baselineConnectivity : 15.0;
-  const maxDist = options?.maxDistanceMeters || 500.0;
+  const baseline = options?.baselineConnectivity !== undefined ? options.baselineConnectivity : 10.0;
+  const maxDist = options?.maxDistanceMeters || 350.0;
   const timeFactor = getTimeOfDayFactor(hour);
 
-  const contributingPOIs: ContributingPOI[] = [];
-  let totalPoiContribution = 0;
+  const rawPOIs: ContributingPOI[] = [];
 
   for (const poi of pois) {
     const dist = minDistanceToRoadMeters(poi.lat, poi.lng, roadCoords);
     if (dist <= maxDist) {
-      const config = POI_WEIGHTS[poi.category] || { baseWeight: 10, nightRetention: 0.5, label: poi.category };
+      const config = POI_WEIGHTS[poi.category] || { baseWeight: 6, nightRetention: 0.5, label: poi.category };
       const decay = Math.max(0, 1 - dist / maxDist);
-      const contribution = config.baseWeight * config.nightRetention * decay * timeFactor;
+      const rawContribution = config.baseWeight * config.nightRetention * decay * timeFactor;
 
-      contributingPOIs.push({
+      rawPOIs.push({
         id: poi.id,
         name: poi.name,
         category: poi.category,
@@ -217,17 +216,32 @@ export function calculateRoadNightExposure(
         baseWeight: config.baseWeight,
         nightRetention: config.nightRetention,
         decay: Number(decay.toFixed(3)),
-        effectiveContribution: Number(contribution.toFixed(2)),
+        effectiveContribution: Number(rawContribution.toFixed(2)),
       });
-
-      totalPoiContribution += contribution;
     }
   }
 
-  // Sort contributing POIs by effective contribution descending
-  contributingPOIs.sort((a, b) => b.effectiveContribution - a.effectiveContribution);
+  // Sort raw POIs by contribution descending
+  rawPOIs.sort((a, b) => b.effectiveContribution - a.effectiveContribution);
 
-  const rawPoiScore = Number(totalPoiContribution.toFixed(2));
+  // Apply diminishing marginal returns aggregation:
+  // Each subsequent POI k receives diminishing weight multiplier (1 / (1 + 0.18 * index))
+  const contributingPOIs: ContributingPOI[] = [];
+  let aggregatedPoiScore = 0;
+
+  for (let i = 0; i < rawPOIs.length; i++) {
+    const p = rawPOIs[i];
+    const marginalMultiplier = 1 / (1 + 0.18 * i);
+    const calibratedContribution = p.effectiveContribution * marginalMultiplier;
+    aggregatedPoiScore += calibratedContribution;
+
+    contributingPOIs.push({
+      ...p,
+      effectiveContribution: Number(calibratedContribution.toFixed(2)),
+    });
+  }
+
+  const rawPoiScore = Number(aggregatedPoiScore.toFixed(2));
   const totalNightExposure = Math.max(0, Math.min(100, Math.round(baseline + rawPoiScore)));
   const footfallRiskFactor = Math.max(0, Math.min(100, 100 - totalNightExposure));
 
