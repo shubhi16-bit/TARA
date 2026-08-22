@@ -6,6 +6,7 @@ import '../theme/app_colors.dart';
 import '../l10n/language_provider.dart';
 import '../providers/reports_provider.dart';
 import '../providers/routing_provider.dart';
+import '../providers/auth_provider.dart';
 
 class ReportIssueScreen extends StatefulWidget {
   final VoidCallback? onReportSubmitted;
@@ -127,6 +128,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
     final lang = Provider.of<LanguageProvider>(context);
     final reportsProvider = Provider.of<ReportsProvider>(context);
     final routing = Provider.of<RoutingProvider>(context);
+    final auth = Provider.of<AuthProvider>(context);
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -408,6 +410,7 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                         notes: notesText,
                         lightsDown: lightsDown,
                         imagePath: photoPath,
+                        userPhone: auth.phoneNumber.isNotEmpty ? auth.phoneNumber : null,
                       );
 
                       if (!mounted) return;

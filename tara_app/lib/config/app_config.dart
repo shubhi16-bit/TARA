@@ -5,7 +5,7 @@ class AppConfig {
   static const String _envApiUrl = String.fromEnvironment('API_URL');
 
   /// Default production Render backend URL
-  static const String defaultProductionApiUrl = 'https://tara-backend.onrender.com/api';
+  static const String defaultProductionApiUrl = 'https://tara-irfg.onrender.com/api';
 
   /// Fallback local development URL
   static const String defaultLocalApiUrl = 'http://localhost:5000/api';
