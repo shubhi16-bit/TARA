@@ -224,6 +224,26 @@ const roads = [
       { lat: 28.6352, lng: 77.2240 },
     ],
   },
+  {
+    id: "r11_lajpat",
+    name: "Lajpat Nagar (Ring Road)",
+    city: CITY_ID,
+    cityId: CITY_ID,
+    score: 68,
+    safetyScore: 32,
+    riskLevel: "HIGH",
+    faultyLights: 4,
+    totalLights: 10,
+    crimeNearby: 2,
+    reports: 4,
+    nightExposure: 62,
+    coordinates: [
+      { lat: 28.5677, lng: 77.2433 },
+      { lat: 28.5690, lng: 77.2420 },
+      { lat: 28.5705, lng: 77.2405 },
+      { lat: 28.5720, lng: 77.2390 },
+    ],
+  },
 ];
 
 const streetlights = [

@@ -4,6 +4,7 @@ import '../theme/app_colors.dart';
 import '../l10n/language_provider.dart';
 import '../l10n/app_strings.dart';
 import '../providers/routing_provider.dart';
+import '../models/monitored_location.dart';
 
 class HomeScreen extends StatelessWidget {
   final Function(int) onNavigateToTab;
@@ -11,15 +12,6 @@ class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key, required this.onNavigateToTab});
 
   void _showChangeLocationDialog(BuildContext context, RoutingProvider routing) {
-    final controller = TextEditingController(text: routing.currentAddress);
-    final quickLocations = [
-      'College Road, Near Girls Hostel',
-      'Connaught Place, Central Delhi',
-      'Station Link Road, Pillar 42',
-      'Cyber City Commuter Corridor',
-      'Main Market Road, Sector 4',
-    ];
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -27,102 +19,169 @@ class HomeScreen extends StatelessWidget {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      builder: (ctx) => Padding(
-        padding: EdgeInsets.only(
-          top: 16,
-          left: 20,
-          right: 20,
-          bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Center(
-              child: Container(
-                width: 44,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryAction,
-                  borderRadius: BorderRadius.circular(10),
-                ),
-              ),
-            ),
-            const SizedBox(height: 18),
-            const Text(
-              'Set Your Location',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-                letterSpacing: -0.4,
-              ),
-            ),
-            const SizedBox(height: 4),
-            const Text(
-              'Enter your current area or pick from common night routes',
-              style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: controller,
-              decoration: InputDecoration(
-                hintText: 'Enter street name or landmark',
-                prefixIcon: const Icon(Icons.search_rounded, size: 20),
-                suffixIcon: IconButton(
-                  icon: const Icon(Icons.my_location_rounded, color: AppColors.navActive, size: 20),
-                  onPressed: () {
-                    routing.fetchCurrentLocation();
-                    Navigator.pop(ctx);
-                  },
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Quick Locations:',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: quickLocations.map((loc) {
-                return InkWell(
-                  onTap: () {
-                    routing.setManualLocation(loc);
-                    Navigator.pop(ctx);
-                  },
-                  borderRadius: BorderRadius.circular(20),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: AppColors.inputBackground,
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(color: AppColors.borderSubtle),
-                    ),
-                    child: Text(
-                      loc,
-                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textPrimary),
-                    ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (_, scrollController) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryAction,
+                    borderRadius: BorderRadius.circular(10),
                   ),
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  if (controller.text.trim().isNotEmpty) {
-                    routing.setManualLocation(controller.text.trim());
-                  }
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Select Monitored Location',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Select a monitored TARA road corridor in New Delhi, or switch to live device GPS.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              // Use Device GPS Button
+              InkWell(
+                onTap: () {
+                  routing.enableDeviceGps();
                   Navigator.pop(ctx);
                 },
-                child: const Text('Update Location'),
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: routing.useDeviceGps
+                        ? AppColors.navActive.withValues(alpha: 0.1)
+                        : AppColors.inputBackground,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: routing.useDeviceGps ? AppColors.navActive : AppColors.borderSubtle,
+                      width: routing.useDeviceGps ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.navActive.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.my_location_rounded, color: AppColors.navActive, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Use My Physical Device GPS',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            Text(
+                              'Uses real device GPS coordinates (for on-site field testing)',
+                              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (routing.useDeviceGps)
+                        const Icon(Icons.check_circle_rounded, color: AppColors.navActive, size: 20),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ],
+              const SizedBox(height: 16),
+              const Text(
+                'Monitored Road Corridors (Delhi Network):',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollController,
+                  itemCount: MonitoredLocation.delhiMonitoredLocations.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (_, index) {
+                    final loc = MonitoredLocation.delhiMonitoredLocations[index];
+                    final isSelected = !routing.useDeviceGps &&
+                        routing.selectedMonitoredLocation?.id == loc.id;
+
+                    return InkWell(
+                      onTap: () {
+                        routing.selectMonitoredLocation(loc);
+                        Navigator.pop(ctx);
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppColors.primaryAction.withValues(alpha: 0.08)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isSelected ? AppColors.primaryAction : AppColors.borderSubtle,
+                            width: isSelected ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.alt_route_rounded,
+                              color: isSelected ? AppColors.primaryAction : AppColors.textMuted,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    loc.name,
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                      color: isSelected ? AppColors.primaryAction : AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${loc.area} (${loc.latitude.toStringAsFixed(4)}, ${loc.longitude.toStringAsFixed(4)})',
+                                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(Icons.check_circle_rounded, color: AppColors.primaryAction, size: 20),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

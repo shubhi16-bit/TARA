@@ -61,6 +61,8 @@ class ApiService {
     int lightsDown = 1,
     String? imagePath,
     String? userPhone,
+    String? road,
+    String? roadId,
   }) async {
     try {
       if (imagePath != null && File(imagePath).existsSync()) {
@@ -75,6 +77,11 @@ class ApiService {
         request.fields['description'] = notes;
         request.fields['lightsDown'] = lightsDown.toString();
         if (userPhone != null) request.fields['userPhone'] = userPhone;
+        if (road != null) {
+          request.fields['road'] = road;
+          request.fields['roadName'] = road;
+        }
+        if (roadId != null) request.fields['roadId'] = roadId;
 
         request.files.add(await http.MultipartFile.fromPath('photo', imagePath));
 
@@ -111,6 +118,8 @@ class ApiService {
             'description': notes,
             'lightsDown': lightsDown,
             'userPhone': userPhone,
+            ...?road != null ? {'road': road, 'roadName': road} : null,
+            ...?roadId != null ? {'roadId': roadId} : null,
           }),
         ).timeout(const Duration(seconds: 4));
 

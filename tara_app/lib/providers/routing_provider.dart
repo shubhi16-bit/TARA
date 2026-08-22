@@ -7,6 +7,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:http/http.dart' as http;
 import '../models/dark_zone_model.dart';
 import '../models/route_model.dart';
+import '../models/monitored_location.dart';
 import '../config/app_config.dart';
 
 enum MapStyleType { googleStandard, googleSatellite, googleTerrain }
@@ -69,10 +70,34 @@ class RoutingProvider extends ChangeNotifier {
     return best;
   }
 
-  LatLng _currentLocation = const LatLng(28.6139, 77.2090);
+  MonitoredLocation? _selectedMonitoredLocation = MonitoredLocation.delhiMonitoredLocations.first;
+  bool _useDeviceGps = false;
+
+  MonitoredLocation? get selectedMonitoredLocation => _selectedMonitoredLocation;
+  bool get useDeviceGps => _useDeviceGps;
+
+  LatLng _currentLocation = MonitoredLocation.delhiMonitoredLocations.first.coordinates;
   bool _isLoadingLocation = false;
-  String _currentAddress = 'Locating...';
-  String _locationStatus = 'GPS Active';
+  String _currentAddress = 'Janpath, Central Delhi (New Delhi)';
+  String _locationStatus = 'Monitored: Janpath';
+
+  void selectMonitoredLocation(MonitoredLocation location) {
+    _selectedMonitoredLocation = location;
+    _useDeviceGps = false;
+    _currentLocation = location.coordinates;
+    _currentAddress = '${location.name}, ${location.area} (${location.city})';
+    _locationStatus = 'Monitored: ${location.name}';
+    _hasFix = true;
+    _notify();
+  }
+
+  Future<void> enableDeviceGps() async {
+    _useDeviceGps = true;
+    _selectedMonitoredLocation = null;
+    _locationStatus = 'Using Device GPS';
+    await fetchCurrentLocation();
+    _notify();
+  }
 
   // Destination & Routes
   String _currentDestination = '';

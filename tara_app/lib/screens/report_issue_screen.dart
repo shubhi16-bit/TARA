@@ -7,6 +7,7 @@ import '../l10n/language_provider.dart';
 import '../providers/reports_provider.dart';
 import '../providers/routing_provider.dart';
 import '../providers/auth_provider.dart';
+import '../models/monitored_location.dart';
 
 class ReportIssueScreen extends StatefulWidget {
   final VoidCallback? onReportSubmitted;
@@ -34,6 +35,182 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
   void dispose() {
     _notesController.dispose();
     super.dispose();
+  }
+
+  void _showLocationPicker(BuildContext context, RoutingProvider routing) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => DraggableScrollableSheet(
+        initialChildSize: 0.75,
+        minChildSize: 0.5,
+        maxChildSize: 0.9,
+        expand: false,
+        builder: (_, scrollController) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.primaryAction,
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Select Incident Location',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                  color: AppColors.textPrimary,
+                  letterSpacing: -0.4,
+                ),
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                'Select the monitored road where the issue is located, or use live device GPS.',
+                style: TextStyle(fontSize: 12.5, color: AppColors.textSecondary),
+              ),
+              const SizedBox(height: 16),
+              // Use Device GPS Option
+              InkWell(
+                onTap: () {
+                  routing.enableDeviceGps();
+                  Navigator.pop(ctx);
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: routing.useDeviceGps
+                        ? AppColors.navActive.withValues(alpha: 0.1)
+                        : AppColors.inputBackground,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: routing.useDeviceGps ? AppColors.navActive : AppColors.borderSubtle,
+                      width: routing.useDeviceGps ? 1.5 : 1,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppColors.navActive.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.my_location_rounded, color: AppColors.navActive, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Use My Physical Device GPS',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.textPrimary,
+                              ),
+                            ),
+                            Text(
+                              'Uses physical device GPS (for on-site testing)',
+                              style: TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (routing.useDeviceGps)
+                        const Icon(Icons.check_circle_rounded, color: AppColors.navActive, size: 20),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Monitored Road Corridors (Delhi Network):',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: ListView.separated(
+                  controller: scrollController,
+                  itemCount: MonitoredLocation.delhiMonitoredLocations.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (_, index) {
+                    final loc = MonitoredLocation.delhiMonitoredLocations[index];
+                    final isSelected = !routing.useDeviceGps &&
+                        routing.selectedMonitoredLocation?.id == loc.id;
+
+                    return InkWell(
+                      onTap: () {
+                        routing.selectMonitoredLocation(loc);
+                        Navigator.pop(ctx);
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        decoration: BoxDecoration(
+                          color: isSelected
+                              ? AppColors.primaryAction.withValues(alpha: 0.08)
+                              : Colors.white,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(
+                            color: isSelected ? AppColors.primaryAction : AppColors.borderSubtle,
+                            width: isSelected ? 1.5 : 1,
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.alt_route_rounded,
+                              color: isSelected ? AppColors.primaryAction : AppColors.textMuted,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    loc.name,
+                                    style: TextStyle(
+                                      fontSize: 13.5,
+                                      fontWeight: isSelected ? FontWeight.w800 : FontWeight.w600,
+                                      color: isSelected ? AppColors.primaryAction : AppColors.textPrimary,
+                                    ),
+                                  ),
+                                  Text(
+                                    '${loc.area} (${loc.latitude.toStringAsFixed(4)}, ${loc.longitude.toStringAsFixed(4)})',
+                                    style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            if (isSelected)
+                              const Icon(Icons.check_circle_rounded, color: AppColors.primaryAction, size: 20),
+                          ],
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _pickImage(ImageSource source) async {
@@ -156,55 +333,77 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
       body: ListView(
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         children: [
-          // 1. Auto-Attached GPS Banner
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: AppColors.borderSubtle),
-              boxShadow: const [
-                BoxShadow(
-                  color: Color(0x06000000),
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: AppColors.tagSchoolBg,
-                    shape: BoxShape.circle,
+          // 1. Interactive Location Selector Card
+          InkWell(
+            onTap: () => _showLocationPicker(context, routing),
+            borderRadius: BorderRadius.circular(18),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(18),
+                border: Border.all(color: AppColors.borderSubtle),
+                boxShadow: const [
+                  BoxShadow(
+                    color: Color(0x06000000),
+                    blurRadius: 8,
+                    offset: Offset(0, 2),
                   ),
-                  child: const Icon(Icons.gps_fixed_rounded, color: AppColors.tagSchoolText, size: 18),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        lang.tr('attachLocation'),
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: AppColors.tagSchoolText),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        routing.currentAddress,
-                        style: const TextStyle(fontSize: 13, color: AppColors.textPrimary, fontWeight: FontWeight.w600),
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                ],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: routing.useDeviceGps ? AppColors.navActive.withValues(alpha: 0.15) : AppColors.tagSchoolBg,
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      routing.useDeviceGps ? Icons.gps_fixed_rounded : Icons.alt_route_rounded,
+                      color: routing.useDeviceGps ? AppColors.navActive : AppColors.tagSchoolText,
+                      size: 20,
+                    ),
                   ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded, size: 18, color: AppColors.textSecondary),
-                  onPressed: () => routing.fetchCurrentLocation(),
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              routing.useDeviceGps ? 'DEVICE GPS (FIELD)' : 'MONITORED LOCATION',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                color: routing.useDeviceGps ? AppColors.navActive : AppColors.primaryAction,
+                                letterSpacing: 0.4,
+                              ),
+                            ),
+                            const Spacer(),
+                            const Text(
+                              'Change',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.navActive,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          routing.currentAddress,
+                          style: const TextStyle(fontSize: 13.5, color: AppColors.textPrimary, fontWeight: FontWeight.w700),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -388,9 +587,28 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                       final messenger = ScaffoldMessenger.of(context);
                       final successMsg = lang.tr('reportSubmitted');
                       final issueTypeName = lang.tr(_issueKeys[_selectedIssueTypeIndex]);
-                      final currentAddr = routing.currentAddress;
-                      final currentLat = routing.currentLocation.latitude;
-                      final currentLng = routing.currentLocation.longitude;
+
+                      final selectedLoc = routing.selectedMonitoredLocation;
+                      final double currentLat;
+                      final double currentLng;
+                      final String currentAddr;
+                      final String? roadName;
+                      final String? roadId;
+
+                      if (!routing.useDeviceGps && selectedLoc != null) {
+                        currentLat = selectedLoc.latitude;
+                        currentLng = selectedLoc.longitude;
+                        currentAddr = '${selectedLoc.name}, ${selectedLoc.area} (${selectedLoc.city})';
+                        roadName = selectedLoc.name;
+                        roadId = selectedLoc.id;
+                      } else {
+                        currentLat = routing.currentLocation.latitude;
+                        currentLng = routing.currentLocation.longitude;
+                        currentAddr = routing.currentAddress;
+                        roadName = null;
+                        roadId = null;
+                      }
+
                       final notesText = _notesController.text.trim().isEmpty
                           ? 'Reported via TARA App'
                           : _notesController.text.trim();
@@ -411,6 +629,8 @@ class _ReportIssueScreenState extends State<ReportIssueScreen> {
                         lightsDown: lightsDown,
                         imagePath: photoPath,
                         userPhone: auth.phoneNumber.isNotEmpty ? auth.phoneNumber : null,
+                        road: roadName,
+                        roadId: roadId,
                       );
 
                       if (!mounted) return;

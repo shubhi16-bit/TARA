@@ -58,6 +58,8 @@ class ReportsProvider extends ChangeNotifier {
     int lightsDown = 1,
     String? imagePath,
     String? userPhone,
+    String? road,
+    String? roadId,
   }) async {
     // 1. Send to Backend API
     final serverReport = await _apiService.submitReport(
@@ -69,6 +71,8 @@ class ReportsProvider extends ChangeNotifier {
       lightsDown: lightsDown,
       imagePath: imagePath,
       userPhone: userPhone,
+      road: road,
+      roadId: roadId,
     );
 
     // 2. Add to Local State

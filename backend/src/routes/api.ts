@@ -104,6 +104,9 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
       lng,
       location,
       locationAddress,
+      road: reqRoad,
+      roadId: reqRoadId,
+      roadName: reqRoadName,
       lightsDown,
       lightsCount,
       cityId,
@@ -125,8 +128,24 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
     else if (lightsCount !== undefined) parsedLightsDown = parseInt(lightsCount, 10) || 1;
     else if (reportType.toLowerCase().includes('multiple')) parsedLightsDown = 3;
 
-    // Resolve nearest road dynamically
-    const { nearestRoad, nearestCity, minDistance } = await findNearestRoad(reportLat, reportLng, cityId || city || 'New Delhi');
+    // Resolve nearest road dynamically or prioritize explicit monitored road selection
+    let resolvedRoadName = reqRoadName || reqRoad || '';
+    let resolvedRoadId = reqRoadId || '';
+    let resolvedCity = cityId || city || 'New Delhi';
+
+    if (!resolvedRoadName || !resolvedRoadId) {
+      const { nearestRoad, nearestCity, minDistance } = await findNearestRoad(reportLat, reportLng, resolvedCity);
+      if (nearestRoad) {
+        resolvedRoadName = resolvedRoadName || nearestRoad.name || nearestRoad.road_name || '';
+        resolvedRoadId = resolvedRoadId || nearestRoad.id || '';
+      }
+      if (nearestCity) {
+        resolvedCity = nearestCity;
+      }
+      console.log(`[GEO-RESOLVE] Nearest road calculated: ${resolvedRoadName} (${resolvedRoadId}) distance: ${minDistance}km`);
+    } else {
+      console.log(`[EXPLICIT-ROAD] Using explicit road selection: ${resolvedRoadName} (${resolvedRoadId})`);
+    }
 
     const reportRef = db.collection('communityReports').doc();
     const reportId = reportRef.id;
@@ -197,11 +216,11 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
       longitude: reportLng,
       location: reportLocation,
       locationAddress: reportLocation,
-      road: nearestRoad?.name || nearestRoad?.road_name || '',
-      roadName: nearestRoad?.name || nearestRoad?.road_name || '',
-      roadId: nearestRoad?.id || '',
-      cityId: nearestCity,
-      city: nearestCity,
+      road: resolvedRoadName,
+      roadName: resolvedRoadName,
+      roadId: resolvedRoadId,
+      cityId: resolvedCity,
+      city: resolvedCity,
       timestamp: adminApp.firestore.FieldValue.serverTimestamp(),
       createdAt: adminApp.firestore.FieldValue.serverTimestamp(),
       updatedAt: adminApp.firestore.FieldValue.serverTimestamp(),
@@ -220,9 +239,8 @@ router.post('/reports', upload.single('photo'), async (req, res) => {
     console.log(`[TARA REPORT DEBUG]`);
     console.log(`Report ID: ${reportId}`);
     console.log(`Coordinates: (${reportLat}, ${reportLng})`);
-    console.log(`City: ${nearestCity}`);
-    console.log(`Nearest Road: ${nearestRoad?.name || 'None'}`);
-    console.log(`Distance: ${minDistance}`);
+    console.log(`City: ${resolvedCity}`);
+    console.log(`Road: ${resolvedRoadName} (${resolvedRoadId})`);
     console.log(`Firestore ID: ${reportId}`);
 
     res.status(201).json({
